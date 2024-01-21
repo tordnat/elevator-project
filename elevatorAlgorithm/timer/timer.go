@@ -9,15 +9,15 @@ var (
 	timerActive  bool
 )
 
-func TimerStart(duration int64) {
+func Start(duration int64) {
 	timerEndTime = time.Now().UnixMicro() + duration
 	timerActive = true
 }
 
-func TimerStop() {
+func Stop() {
 	timerActive = false
 }
 
-func TimerTimedOut() bool {
+func TimedOut() bool {
 	return (timerActive && time.Now().UnixMicro() > timerEndTime)
 }
