@@ -5,13 +5,15 @@ import (
 	"net"
 )
 
-type Dirn enum { 
-    D_Down  = -1,
-    D_Stop  = 0,
-    D_Up    = 1
-}
+type Dirn int
 
-type Button enum { 
+const (
+    D_Down Dirn = -1
+    D_Stop  = 0
+    D_Up    = 1
+)
+
+type Button int { 
     B_HallUp,
     B_HallDown,
     B_Cab
