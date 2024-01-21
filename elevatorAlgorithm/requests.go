@@ -143,4 +143,3 @@ func requests_clearAtCurrentFloor(e Elevator){
     
     return e;
 }
-

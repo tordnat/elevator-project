@@ -1,10 +1,26 @@
 package main
 
 import (
+	"elevator-project/timer"
+	"elevatorDriver/elevio"
 	"fmt"
-	"./elev_algo/timer"
+	"networkDriver/bcast"
 )
 
 func main() {
-	fmt.Printf("Main is running\n")
+	elevio.Init("localhost:15657", 4)
+	elevio.SetMotorDirection(elevio.MD_Down)
+
+	peerTxEnable := make(chan string)
+	go bcast.Transmitter(15647, peerTxEnable)
+	peerTxEnable <- "true"
+	fmt.Printf("💩 is running\n")
+	timer.Timer_start(10000000)
+	for {
+		if timer.Timer_timedOut() {
+			fmt.Println("Timer stopped")
+			return
+		}
+	}
+
 }

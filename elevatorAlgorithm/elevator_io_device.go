@@ -26,6 +26,7 @@ type ElevInputDevice struct {
     
 }
 
+
 type ElevOutputDevice struct {
     void (*floorIndicator)(int);
     void (*requestButtonLight)(int, Button, int);
@@ -95,4 +96,3 @@ elevio_button_toString(Button b) char* {
         return "B_UNDEFINED"
     }
 }
-

@@ -3,6 +3,9 @@
 #
 # Project Specific
 Simulator-v2/
+Secret-Homework1/
+.DS_Store
+.vscode
 
 # Binaries for programs and plugins
 *.exe
