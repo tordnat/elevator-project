@@ -1,9 +1,11 @@
+package elevator
+
 import(
     "fmt"
 
 )
 
-type ElevatorBehaviour enum {
+type ElevatorBehaviour enum { //spm??
     EB_Idle,
     EB_DoorOpen,
     EB_Moving
@@ -43,7 +45,7 @@ eb_toString(eb ElevatorBehaviour) char* {
     }
 }
 
-elevator_print(es Elevator) Nil {
+elevator_print(es Elevator) {
     fmt.Print("  +--------------------+\n");
     fmt.Print(
         "  |floor = %-2d          |\n"

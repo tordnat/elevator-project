@@ -1,6 +1,8 @@
-import{
+package fsm
+
+import(
 	"fmt"
-}
+)
 
 var(
 	elevator Elevator;

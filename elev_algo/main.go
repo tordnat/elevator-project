@@ -1,6 +1,8 @@
-import{
+package main_old
+
+import(
 	"fmt"
-}
+)
 
 main(void) int64 {
     printf("Started!\n");

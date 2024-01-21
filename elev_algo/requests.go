@@ -1,3 +1,5 @@
+package requests
+
 type DirnBehaviourPair struct {
     Dirn                dirn;
     ElevatorBehaviour   behaviour;
