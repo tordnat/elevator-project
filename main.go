@@ -5,11 +5,11 @@ import (
 	"elevatorAlgorithm/fsm"
 	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
-	"log"
+	"log/slog"
 )
 
 func main() {
-	log.Println("Elevator starting 🛗")
+	slog.Info("Elevator starting 🛗")
 	elevio.Init("localhost:15657", elevator.N_FLOORS)
 	if elevio.GetFloor() == -1 {
 		fsm.OnInitBetweenFloors()
