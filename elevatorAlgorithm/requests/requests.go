@@ -3,6 +3,7 @@ package requests
 import (
 	"elevatorAlgorithm/elevator"
 	"elevatorDriver/elevio"
+	"log"
 )
 
 type DirnBehaviourPair struct {
@@ -101,6 +102,7 @@ func ShouldClearImmediately(e elevator.Elevator, btn_floor int, btn_type elevio.
 }
 
 func ClearAtCurrentFloor(e elevator.Elevator) elevator.Elevator {
+	log.Println("In ClearAtCurrentFloor")
 	e.Requests[e.Floor][elevio.BT_Cab] = false
 	switch e.Dirn {
 	case elevio.MD_Up:

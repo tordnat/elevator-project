@@ -5,7 +5,6 @@ import (
 	"elevatorAlgorithm/requests"
 	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
-	"log"
 )
 
 var Fsm_lint_me = true
@@ -32,7 +31,7 @@ func OnInitBetweenFloors() {
 
 func OnRequestButtonPress(btnFloor int, btnType elevio.ButtonType) {
 	//fmt.Printf("\n\n%s(%d, %s)\n", function, btnFloor, elevioButtonToString(btnType))
-	log.Println("Pressed button for floor ", btnFloor)
+	//log.Println("Pressed button for floor ", btnFloor)
 	switch elevatorSingelton.Behaviour {
 	case elevator.EB_DoorOpen:
 		if requests.ShouldClearImmediately(elevatorSingelton, btnFloor, btnType) {
@@ -75,7 +74,7 @@ func OnFloorArrival(newFloor int) {
 	switch elevatorSingelton.Behaviour {
 	case elevator.EB_Moving:
 		if requests.ShouldStop(elevatorSingelton) {
-			log.Println("Arrived at floor: ", elevatorSingelton.Floor)
+			//log.Println("Arrived at floor: ", elevatorSingelton.Floor)
 			elevio.SetMotorDirection(elevio.MD_Stop)
 			elevio.SetDoorOpenLamp(true)
 			elevatorSingelton = requests.ClearAtCurrentFloor(elevatorSingelton)
