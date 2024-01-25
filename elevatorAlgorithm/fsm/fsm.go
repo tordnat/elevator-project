@@ -64,6 +64,7 @@ func OnRequestButtonPress(btnFloor int, btnType elevio.ButtonType) {
 		}
 		break
 	}
+	setAllLights(elevatorSingelton)
 }
 
 func OnFloorArrival(newFloor int) {
