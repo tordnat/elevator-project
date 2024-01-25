@@ -4,8 +4,12 @@
 
 Elevator project for Real-time Programming TTK4145 at NTNU
 
-2.1: Network design questions
--------------------
+## To-do:
+- Logging functionality 🤓
+- Printing MORE elevators simul. 🛗🛗🛗🛗
+
+## Design
+### Network design questions
 
 Before proceeding with any code related to a network module, think about how you would solve these problems, and what you need in order to solve them.
 

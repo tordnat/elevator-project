@@ -1,9 +1,9 @@
 package peers
 
 import (
-	"Network-go/network/conn"
 	"fmt"
 	"net"
+	"networkDriver/conn"
 	"sort"
 	"time"
 )

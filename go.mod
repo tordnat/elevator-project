@@ -1,5 +1,15 @@
-module github.com/tordnat/elevator-project
+module elevator-project
+
+require networkDriver v0.0.0
+
+replace networkDriver => ./networkDriver
+
+require elevatorDriver v0.0.0
+
+replace elevatorDriver => ./elevatorDriver
+
+require elevatorAlgorithm v0.0.0
+
+replace elevatorAlgorithm => ./elevatorAlgorithm
 
 go 1.20
-require Network-go v0.0.0
-replace Network-go => ./Network-go
