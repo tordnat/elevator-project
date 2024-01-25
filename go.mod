@@ -12,4 +12,4 @@ require elevatorAlgorithm v0.0.0
 
 replace elevatorAlgorithm => ./elevatorAlgorithm
 
-go 1.21
+go 1.20

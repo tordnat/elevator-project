@@ -5,20 +5,12 @@ import (
 	"elevatorAlgorithm/fsm"
 	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
-	"log/slog"
-	"os"
+	"log"
 )
 
 func main() {
-	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level:     slog.LevelDebug,
-		AddSource: false,
-	})
-	logger := slog.New(handler)
 
-	slog.SetDefault(logger)
-
-	slog.Info("Elevator starting 🛗")
+	log.Println("Elevator starting 🛗")
 	elevio.Init("localhost:15657", elevator.N_FLOORS)
 	if elevio.GetFloor() == -1 {
 		fsm.OnInitBetweenFloors()
