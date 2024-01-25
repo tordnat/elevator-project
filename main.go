@@ -16,14 +16,12 @@ func main() {
 	if elevio.GetFloor() == -1 {
 		fsm.OnInitBetweenFloors()
 	}
+	timer.Initialize()
 	buttonEvent := make(chan elevio.ButtonEvent)
 	floorEvent := make(chan int)
-	doorCloseEvent := make(chan time.Time)
-	timer.Initialize()
 	elevio.SetDoorOpenLamp(false)
 	go elevio.PollButtons(buttonEvent)
 	go elevio.PollFloorSensor(floorEvent)
-	go timer.PollTimer(doorCloseEvent)
 
 	for {
 		select {
@@ -33,9 +31,10 @@ func main() {
 		case event := <-floorEvent:
 			log.Println("Floor event")
 			fsm.OnFloorArrival(event)
-		case <-doorCloseEvent:
-			log.Println("Door close event")
+		case <-timer.TimerChan:
+			log.Println("Got timer channel event")
 			fsm.OnDoorTimeOut()
 		}
+		time.Sleep(1 * time.Millisecond)
 	}
 }

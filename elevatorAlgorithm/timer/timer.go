@@ -2,25 +2,44 @@ package timer
 
 import (
 	"elevatorAlgorithm/elevator"
-	"log"
+	"sync"
 	"time"
 )
 
-var DoorTimer *time.Timer
+var (
+	TimerChan  chan bool
+	resetChan  chan struct{}
+	timer      *time.Timer
+	timerMutex sync.Mutex
+)
 
 func Initialize() {
-	DoorTimer = time.NewTimer(0 * time.Second)
-	DoorTimer.Stop()
+	TimerChan = make(chan bool, 1)
+	resetChan = make(chan struct{}, 1)
+	timer = time.NewTimer(time.Second)
+	timer.Stop()
+
+	go func() {
+		for {
+			select {
+			case <-resetChan:
+				if !timer.Stop() {
+					select {
+					case <-TimerChan:
+					default:
+					}
+				}
+				timer.Reset(time.Second * elevator.DOOR_OPEN_DURATION_S)
+			case <-timer.C:
+				TimerChan <- true
+			}
+
+		}
+	}()
 }
 
 func Start() {
-	log.Println("Started timer")
-	if !DoorTimer.Stop() {
-		<-DoorTimer.C // Drain the channel if the timer had already expired
-	}
-	DoorTimer.Reset(elevator.DOOR_OPEN_DURATION_S)
-}
-
-func PollTimer(timeChan chan time.Time) {
-	timeChan <- <-DoorTimer.C
+	timerMutex.Lock()
+	defer timerMutex.Unlock()
+	resetChan <- struct{}{}
 }
