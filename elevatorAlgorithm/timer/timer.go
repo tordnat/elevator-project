@@ -1,23 +1,21 @@
 package timer
 
 import (
+	"elevatorAlgorithm/elevator"
 	"time"
 )
 
 var (
-	timerEndTime int64
-	timerActive  bool
+	TimerActive bool
 )
 
-func Start(duration int64) {
-	timerEndTime = time.Now().UnixMicro() + duration
-	timerActive = true
-}
-
-func Stop() {
-	timerActive = false
-}
-
-func TimedOut() bool {
-	return (timerActive && time.Now().UnixMicro() > timerEndTime)
+func Start() {
+	timer := time.NewTimer(time.Second * elevator.DOOR_OPEN_DURATION_S)
+	TimerActive = true
+	go func() {
+		select {
+		case <-timer.C:
+			TimerActive = false
+		}
+	}()
 }

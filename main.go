@@ -46,8 +46,7 @@ func main() {
 			prevFloor = f
 		}
 		{ // Timer
-			if timer.TimedOut() {
-				timer.Stop()
+			if timer.TimerActive {
 				fsm.OnDoorTimeOut()
 			}
 		}
