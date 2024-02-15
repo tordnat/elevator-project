@@ -6,6 +6,7 @@ import (
 	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
 	"log"
+	"time"
 )
 
 func main() {
@@ -15,33 +16,25 @@ func main() {
 	if elevio.GetFloor() == -1 {
 		fsm.OnInitBetweenFloors()
 	}
-	prevFloor := -1
-	var prev_btn [elevator.N_FLOORS][elevator.N_BUTTONS]bool
+	timer.Initialize()
+	buttonEvent := make(chan elevio.ButtonEvent)
+	floorEvent := make(chan int)
+	elevio.SetDoorOpenLamp(false)
+	go elevio.PollButtons(buttonEvent)
+	go elevio.PollFloorSensor(floorEvent)
 
 	for {
-		{ //Request button
-			for f := 0; f < elevator.N_FLOORS; f++ {
-				for b := 0; b < elevator.N_BUTTONS; b++ {
-					v := elevio.GetButton(elevio.ButtonType(b), f)
-					if v && v != prev_btn[f][b] {
-						fsm.OnRequestButtonPress(f, elevio.ButtonType(b))
-					}
-					prev_btn[f][b] = v
-				}
-			}
+		select {
+		case event := <-buttonEvent:
+			log.Println("Button event")
+			fsm.OnRequestButtonPress(event.Floor, event.Button)
+		case event := <-floorEvent:
+			log.Println("Floor event")
+			fsm.OnFloorArrival(event)
+		case <-timer.TimerChan:
+			log.Println("Got timer channel event")
+			fsm.OnDoorTimeOut()
 		}
-		{ //Floor sensor
-			f := elevio.GetFloor()
-			if f != -1 && f != prevFloor {
-				fsm.OnFloorArrival(f)
-			}
-			prevFloor = f
-		}
-		{ // Timer
-			if timer.TimerActive {
-				fsm.OnDoorTimeOut()
-			}
-		}
+		time.Sleep(1 * time.Millisecond)
 	}
-
 }
