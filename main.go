@@ -5,6 +5,7 @@ import (
 	"elevatorAlgorithm/fsm"
 	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
+	"elevatorMusic/musicplayer"
 	"log"
 	"time"
 )
@@ -13,6 +14,11 @@ func main() {
 
 	log.Println("Elevator starting 🛗")
 	elevio.Init("localhost:15657", elevator.N_FLOORS)
+
+	musicplayer.PlayMusic("media/logistics_lounge.opus")
+	time.Sleep(75 * time.Millisecond)
+	musicplayer.PlayMusic("media/ding.opus")
+
 	if elevio.GetFloor() == -1 {
 		fsm.OnInitBetweenFloors()
 	}

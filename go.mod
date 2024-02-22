@@ -12,4 +12,8 @@ require elevatorAlgorithm v0.0.0
 
 replace elevatorAlgorithm => ./elevatorAlgorithm
 
+require elevatorMusic v0.0.0
+
+replace elevatorMusic => ./elevatorMusic
+
 go 1.20
