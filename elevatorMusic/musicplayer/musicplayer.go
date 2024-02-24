@@ -7,12 +7,13 @@ import (
 	"syscall"
 )
 
-var musicPid *os.Process
+var MusicPid *os.Process
+var dingPid *os.Process
 
-func PlayMusic(path string, loop_music bool) {
+func PlayMusic(path string, pid *os.Process, loop_music bool) {
 	if path == "" {
-		if musicPid != nil {
-			musicPid.Signal(syscall.SIGCONT)
+		if pid != nil {
+			pid.Signal(syscall.SIGCONT)
 		}
 		return
 	}
@@ -30,20 +31,31 @@ func PlayMusic(path string, loop_music bool) {
 		return
 	}
 
-	musicPid = cmd.Process
+	pid = cmd.Process
 	log.Println("Playing elevator", path)
 }
 
-func PauseMusic() {
-	if musicPid != nil {
-		musicPid.Signal(syscall.SIGSTOP)
+func PauseMusic(pid *os.Process) {
+	if pid != nil {
+		pid.Signal(syscall.SIGSTOP)
 		log.Println("Elevator music paused")
 	}
 }
 
-func StopMusic() {
-	if musicPid != nil {
-		musicPid.Signal(syscall.SIGINT)
+func ResumeMusic(pid *os.Process) {
+	if pid != nil {
+		pid.Signal(syscall.SIGCONT)
+		log.Println("Elevator music resumed")
+	}
+}
+
+func StopMusic(pid *os.Process) {
+	if pid != nil {
+		pid.Signal(syscall.SIGINT)
 		log.Println("Elevator music stopped")
 	}
+}
+
+func PlayDing() {
+	PlayMusic("media/ding.opus", dingPid, false)
 }
