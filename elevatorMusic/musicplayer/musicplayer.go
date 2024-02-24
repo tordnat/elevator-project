@@ -9,7 +9,7 @@ import (
 
 var musicPid *os.Process
 
-func PlayMusic(path string) {
+func PlayMusic(path string, loop_music bool) {
 	if path == "" {
 		if musicPid != nil {
 			musicPid.Signal(syscall.SIGCONT)
@@ -18,8 +18,12 @@ func PlayMusic(path string) {
 	}
 
 	var cmd *exec.Cmd
-	// Depending on the platform, you might need to adjust the paths and flags
-	cmd = exec.Command("ffplay", path, "-autoexit", "-nodisp", "-hide_banner", "-loglevel", "warning", "-loop", "0")
+
+	if loop_music {
+		cmd = exec.Command("ffplay", path, "-autoexit", "-nodisp", "-hide_banner", "-loglevel", "warning", "-loop", "0")
+	} else {
+		cmd = exec.Command("ffplay", path, "-autoexit", "-nodisp", "-hide_banner", "-loglevel", "warning")
+	}
 
 	if err := cmd.Start(); err != nil {
 		log.Printf("Failed to start music: %v", err)
@@ -27,7 +31,7 @@ func PlayMusic(path string) {
 	}
 
 	musicPid = cmd.Process
-	log.Println("Playing elevator music")
+	log.Println("Playing elevator", path)
 }
 
 func PauseMusic() {
