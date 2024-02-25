@@ -1,6 +1,8 @@
-package main
+package hra
 
 import (
+	"elevatorAlgorithm/elevator"
+	"elevatorDriver/elevio"
 	"encoding/json"
 	"fmt"
 
@@ -8,77 +10,78 @@ import (
 	"os/exec"
 )
 
-type State struct {
+// TODO: Move this to a different file
+type LocalElevatorState struct {
+	Behaviour   elevator.ElevatorBehaviour
+	Floor       int
+	Direction   elevio.MotorDirection
+	CabRequests []bool
+}
+
+type ElevatorSystem struct {
+	HallRequests   [][]bool
+	ElevatorStates map[string]LocalElevatorState
+}
+
+type hraLocalElevatorState struct {
 	Behaviour   string `json:"behaviour"` // "idle", "moving", or "doorOpen"
 	Floor       int    `json:"floor"`
 	Direction   string `json:"direction"` // "up", "down", or "stop"
 	CabRequests []bool `json:"cabRequests"`
 }
 
-type ElevatorSystem struct {
-	HallRequests [][]bool `json:"hallRequests"`
-	States       []State  `json:"states"`
+type hraElevatorSystem struct {
+	HallRequests   [][]bool                         `json:"hallRequests"`
+	ElevatorStates map[string]hraLocalElevatorState `json:"states"`
 }
+
 type OrderAssignments map[string][][]bool
 
-func (e *ElevatorSystem) toMap() map[string]State {
-	statesMap := make(map[string]State)
-	for i, state := range e.States {
-		key := fmt.Sprintf("%d", i)
-		statesMap[key] = state
+func elevatorSystemToHraSystem(elevSystem ElevatorSystem) hraElevatorSystem {
+	hraSystem := hraElevatorSystem{
+		HallRequests:   elevSystem.HallRequests,
+		ElevatorStates: make(map[string]hraLocalElevatorState),
 	}
-	return statesMap
-}
 
-//Example usage. Remove when module is incorporated
-/*
-func main() {
-	system := ElevatorSystem{
-		HallRequests: [][]bool{
-			{false, false}, {true, false}, {false, false}, {false, true},
-		},
-		States: []State{
-			{
-				Behaviour:   "moving",
-				Floor:       2,
-				Direction:   "up",
-				CabRequests: []bool{false, false, true, true},
-			},
-			{
-				Behaviour:   "idle",
-				Floor:       0,
-				Direction:   "stop",
-				CabRequests: []bool{false, false, false, false},
-			},
-		},
+	for id, state := range elevSystem.ElevatorStates {
+		hraState := hraLocalElevatorState{
+			Floor:       state.Floor,
+			CabRequests: state.CabRequests,
+		}
+
+		switch state.Behaviour {
+		case elevator.EB_Idle:
+			hraState.Behaviour = "idle"
+		case elevator.EB_DoorOpen:
+			hraState.Behaviour = "doorOpen"
+		case elevator.EB_Moving:
+			hraState.Behaviour = "moving"
+		}
+
+		switch state.Direction {
+		case elevio.MD_Stop:
+			hraState.Direction = "stop"
+		case elevio.MD_Up:
+			hraState.Direction = "up"
+		case elevio.MD_Down:
+			hraState.Direction = "down"
+		}
+
+		hraSystem.ElevatorStates[id] = hraState
 	}
-	input := encode(system)
 
-	fmt.Println((input))
-
-	hraString := HRA(input)
-	fmt.Println(hraString)
-	orders := decode(hraString)
-	fmt.Printf("Result: %+v\n", orders["1"])
+	return hraSystem
 }
-*/
-func encode(system ElevatorSystem) string {
+func Encode(system ElevatorSystem) string {
 	//Encode to JSON dynamically
-	statesMap := system.toMap()
-	input, err := json.Marshal(struct {
-		HallRequests [][]bool         `json:"hallRequests"`
-		States       map[string]State `json:"states"`
-	}{
-		HallRequests: system.HallRequests,
-		States:       statesMap,
-	})
+	input, err := json.Marshal(elevatorSystemToHraSystem(system))
 	if err != nil {
 		fmt.Println("Error ", err)
 	}
 	return string(input)
 }
 
-func HRA(elevatorStates string) string {
+func AssignRequests(elevatorStates string) string {
 	out, err := exec.Command("./hall_request_assigner", "-i", (elevatorStates)).Output()
 	if err != nil {
 		fmt.Println("Error ", err)
@@ -86,7 +89,7 @@ func HRA(elevatorStates string) string {
 	return string(out)
 }
 
-func decode(hraString string) OrderAssignments {
+func Decode(hraString string) OrderAssignments {
 	var result OrderAssignments
 	err := json.Unmarshal([]byte(hraString), &result)
 	if err != nil {

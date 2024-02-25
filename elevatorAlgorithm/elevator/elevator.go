@@ -11,7 +11,7 @@ const DOOR_OPEN_DURATION_S = 2
 type ElevatorBehaviour int
 
 const (
-	EB_Idle = iota
+	EB_Idle ElevatorBehaviour = iota
 	EB_DoorOpen
 	EB_Moving
 )
