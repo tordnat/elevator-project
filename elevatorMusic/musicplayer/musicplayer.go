@@ -9,6 +9,7 @@ import (
 
 var MusicPid *os.Process
 var dingPid *os.Process
+var pairPid *os.Process
 
 func PlayMusic(path string, pid *os.Process, loop_music bool) {
 	if path == "" {
@@ -58,4 +59,8 @@ func StopMusic(pid *os.Process) {
 
 func PlayDing() {
 	PlayMusic("media/ding.opus", dingPid, false)
+}
+
+func PlayPairing() {
+	PlayMusic("media/pairing_sound.opus", pairPid, false)
 }
