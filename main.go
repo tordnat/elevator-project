@@ -14,8 +14,6 @@ func main() {
 	log.Println("Elevator starting 🛗")
 	elevio.Init("localhost:15657", elevator.N_FLOORS)
 
-	time.Sleep(75 * time.Millisecond)
-
 	if elevio.GetFloor() == -1 {
 		fsm.OnInitBetweenFloors()
 	}
