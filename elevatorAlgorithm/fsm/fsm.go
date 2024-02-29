@@ -4,41 +4,44 @@ import (
 	"elevatorAlgorithm/elevator"
 	"elevatorAlgorithm/hra"
 	"elevatorAlgorithm/requests"
+	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
 )
 
-
-func setAllLights(system hra.ElevatorSystem , hr hra.HallRequests) {
+func setAllLights(confirmedOrders [][]bool) {
 	for floor := 0; floor < elevator.N_FLOORS; floor++ {
 		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
-	
-
-func OnInitBetweenFloors() {
-	elevio.SetMotorDirection(elevio.MD_Down)
-	elevatorSingelton.Dirn = elevio.MD_Down
-	elevatorSingelton.Behaviour = elevator.EB_Moving
+			elevio.SetButtonLamp(elevio.ButtonType(btn), floor, confirmedOrders[floor][btn])
+		}
+	}
 }
 
-func OnRequestButtonPress(btnFloor int, btnType elevio.ButtonType) {
+func OnInitBetweenFloors(e hra.LocalElevatorState) {
+	elevio.SetMotorDirection(elevio.MD_Down)
+	e.Direction = elevio.MD_Down
+	e.Behaviour = elevator.EB_Moving
+}
+
+func OnRequestButtonPress(btnFloor int, btnType elevio.ButtonType, e hra.LocalElevatorState, confirmedOrders [][]bool) {
 	//fmt.Printf("\n\n%s(%d, %s)\n", function, btnFloor, elevioButtonToString(btnType))
 	//log.Println("Pressed button for floor ", btnFloor)
-	switch elevatorSingelton.Behaviour {
+	switch e.Behaviour {
 	case elevator.EB_DoorOpen:
-		if requests.ShouldClearImmediately(elevatorSingelton, btnFloor, btnType) {
+		if requests.ShouldClearImmediately(e, btnFloor, btnType) {
 			timer.Start()
 		} else {
-			elevatorSingelton.Requests[btnFloor][btnType] = true
+			//hr[btnFloor][btnType] = true
 		}
 		break
 	case elevator.EB_Moving:
-		elevatorSingelton.Requests[btnFloor][btnType] = true
+		confirmedOrders[btnFloor][btnType] = true
 		break
 	case elevator.EB_Idle:
-		elevatorSingelton.Requests[btnFloor][btnType] = true
-		pair := requests.ChooseDirection(elevatorSingelton)
+		//hr[btnFloor][btnType] = true
+		pair := requests.ChooseDirection(e)
 
-		elevatorSingelton.Dirn = pair.Dir
-		elevatorSingelton.Behaviour = pair.Behaviour
+		e.Direction = pair.Dir
+		e.Behaviour = pair.Behaviour
 
 		switch pair.Behaviour {
 		case elevator.EB_DoorOpen:

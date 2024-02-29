@@ -11,7 +11,8 @@ import (
 )
 
 func main() {
-	elevatorSystem := hra.ElevatorSystem
+	var elevatorSystem hra.ElevatorSystem
+
 	log.Println("Elevator starting 🛗")
 	elevio.Init("localhost:15657", elevator.N_FLOORS)
 
@@ -26,6 +27,7 @@ func main() {
 	go elevio.PollFloorSensor(floorEvent)
 
 	for {
+		//få vekk timer, før go routine, fjerne hr/assigning, dette skal håndteres et annet sted
 		select {
 		case event := <-buttonEvent:
 			log.Println("Button event")
