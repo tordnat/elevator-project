@@ -3,6 +3,7 @@ package main
 import (
 	"elevatorAlgorithm/elevator"
 	"elevatorAlgorithm/fsm"
+	"elevatorAlgorithm/hra"
 	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
 	"log"
@@ -10,7 +11,7 @@ import (
 )
 
 func main() {
-
+	elevatorSystem := hra.ElevatorSystem
 	log.Println("Elevator starting 🛗")
 	elevio.Init("localhost:15657", elevator.N_FLOORS)
 

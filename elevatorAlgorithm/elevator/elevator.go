@@ -23,14 +23,6 @@ type Elevator struct {
 	Behaviour ElevatorBehaviour
 }
 
-func NewElevator() Elevator {
-	return Elevator{
-		Floor:     -1,
-		Dirn:      elevio.MD_Stop,
-		Behaviour: EB_Idle,
-	}
-}
-
 func eb_toString(eb ElevatorBehaviour) string {
 	if eb == EB_Idle {
 		return "EB_Idle"
@@ -42,40 +34,3 @@ func eb_toString(eb ElevatorBehaviour) string {
 		return "EB_UNDEFINED"
 	}
 }
-
-/*
-func elevator_print(es Elevator) {
-    fmt.Println("  +--------------------+")
-    fmt.Println("  |floor = %-2d    |", es.floor)
-    fmt.Println("  |dirn  = %-12.12s|", elevio_dirn_toString(es.dirn))
-    fmt.Println("  |behav = %-12.12s|", eb_toString(es.behaviour))
-    fmt.Println("  +--------------------+")
-    fmt.Println("  |  | up⬆️ | dn ⬇️ | cab🛗|")
-    for f := N_FLOORS-1; f >= 0; f-- {
-        fmt.Print("  | %d", f)
-        for btn := 0; btn < N_BUTTONS; btn++ {
-            if (f == N_FLOORS-1 && btn == B_HallUp)  || (f == 0 && btn == B_HallDown){
-                fmt.Print("|     ")
-            } else {
-                if fmt.Print(es.requests[f][btn]) {
-                    fmt.Print("|  #  " , "|  -  ")
-                }
-            }
-        }
-        fmt.Println("|");
-    }
-    fmt.Println("  +--------------------+");
-}
-
-elevator_uninitialized() Elevator {
-    return (Elevator){
-        floor: -1,
-        dirn: D_Stop,
-        behaviour: EB_Idle,
-        config: {
-            clearRequestVariant: CV_All,
-            doorOpenDuration_s: 3.0,
-        },
-    };
-}
-*/

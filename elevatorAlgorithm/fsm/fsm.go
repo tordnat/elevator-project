@@ -2,26 +2,16 @@ package fsm
 
 import (
 	"elevatorAlgorithm/elevator"
+	"elevatorAlgorithm/hra"
 	"elevatorAlgorithm/requests"
-	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
 )
 
-var Fsm_lint_me = true
 
-var elevatorSingelton elevator.Elevator
-
-func FsmInit() {
-	elevatorSingelton = elevator.NewElevator()
-}
-
-func setAllLights(es elevator.Elevator) {
+func setAllLights(system hra.ElevatorSystem , hr hra.HallRequests) {
 	for floor := 0; floor < elevator.N_FLOORS; floor++ {
 		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
-			elevio.SetButtonLamp(elevio.ButtonType(btn), floor, es.Requests[floor][btn])
-		}
-	}
-}
+	
 
 func OnInitBetweenFloors() {
 	elevio.SetMotorDirection(elevio.MD_Down)
@@ -55,14 +45,9 @@ func OnRequestButtonPress(btnFloor int, btnType elevio.ButtonType) {
 			elevio.SetDoorOpenLamp(true)
 			timer.Start()
 			elevatorSingelton = requests.ClearAtCurrentFloor(elevatorSingelton)
-			break
 		case elevator.EB_Moving:
 			elevio.SetMotorDirection(elevatorSingelton.Dirn)
-			break
-		case elevator.EB_Idle:
-			break
 		}
-		break
 	}
 	setAllLights(elevatorSingelton)
 }
@@ -83,9 +68,6 @@ func OnFloorArrival(newFloor int) {
 			setAllLights(elevatorSingelton)
 			elevatorSingelton.Behaviour = elevator.EB_DoorOpen
 		}
-		break
-	default:
-		break
 	}
 	//log. // Consider proper logging
 	//elevator.elevator_print(elevatorSingelton)
@@ -104,15 +86,9 @@ func OnDoorTimeOut() {
 			timer.Start()
 			elevatorSingelton = requests.ClearAtCurrentFloor(elevatorSingelton)
 			setAllLights(elevatorSingelton)
-			break
-		case elevator.EB_Moving:
 		case elevator.EB_Idle:
 			elevio.SetDoorOpenLamp(false)
 			elevio.SetMotorDirection(elevatorSingelton.Dirn)
-			break
 		}
-		break
-	default:
-		break
 	}
 }
