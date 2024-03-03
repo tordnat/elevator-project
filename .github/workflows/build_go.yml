@@ -25,4 +25,4 @@ jobs:
       run: go build -v ./...
 
     - name: Test HRA
-      run: go test -v ./elevatorAlgorithm/hra
+      run: go test -v elevatorAlgorithm/hra
