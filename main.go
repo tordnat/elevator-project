@@ -12,7 +12,7 @@ import (
 
 func main() {
 	var elevatorSystem hra.ElevatorSystem
-
+	elevatorID := "0"
 	log.Println("Elevator starting 🛗")
 	elevio.Init("localhost:15657", elevator.N_FLOORS)
 
@@ -22,22 +22,24 @@ func main() {
 	timer.Initialize()
 	buttonEvent := make(chan elevio.ButtonEvent)
 	floorEvent := make(chan int)
+	networkDummy := make(chan hra.ElevatorSystem)
 	elevio.SetDoorOpenLamp(false)
 	go elevio.PollButtons(buttonEvent)
 	go elevio.PollFloorSensor(floorEvent)
 
 	for {
 		//få vekk timer, før go routine, fjerne hr/assigning, dette skal håndteres et annet sted
+		// ++ include obstruction: should just reset timer for door
 		select {
+		case updatedElevatorSystem := <-networkDummy:
+			log.Println("Updated elevator system")
 		case event := <-buttonEvent:
 			log.Println("Button event")
-			fsm.OnRequestButtonPress(event.Floor, event.Button)
 		case event := <-floorEvent:
 			log.Println("Floor event")
-			fsm.OnFloorArrival(event)
 		case <-timer.TimerChan:
+			timer.Timedout = true
 			log.Println("Got timer channel event")
-			fsm.OnDoorTimeOut()
 		}
 		time.Sleep(1 * time.Millisecond)
 	}

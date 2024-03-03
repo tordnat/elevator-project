@@ -17,7 +17,7 @@ type LocalElevatorState struct {
 	Direction   elevio.MotorDirection
 	CabRequests []bool
 }
-type HallRequestsType [][]bool
+type HallRequestsType [][]int
 type ElevatorSystem struct {
 	HallRequests   HallRequestsType
 	ElevatorStates map[string]LocalElevatorState

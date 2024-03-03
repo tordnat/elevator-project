@@ -13,10 +13,10 @@ type DirnBehaviourPair struct {
 }
 
 // This is ambiguous, change the name
-func requestsAbove(e hra.LocalElevatorState, hr hra.HallRequests) bool {
+func requestsAbove(e hra.LocalElevatorState, hr hra.HallRequestsType) bool {
 	for f := e.Floor + 1; f < elevator.N_FLOORS; f++ {
 		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
-			if hr {
+			if hr[f][btn] {
 				return true
 			}
 		}
@@ -25,10 +25,10 @@ func requestsAbove(e hra.LocalElevatorState, hr hra.HallRequests) bool {
 }
 
 // This is ambiguous, change the name
-func requestsBelow((e hra.LocalElevatorState, hr hra.HallRequests) bool {
+func requestsBelow(e hra.LocalElevatorState, hr hra.HallRequestsType) bool {
 	for f := 0; f < e.Floor; f++ {
 		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
-			if hr {
+			if hr[f][btn] {
 				return true
 			}
 		}
@@ -36,7 +36,7 @@ func requestsBelow((e hra.LocalElevatorState, hr hra.HallRequests) bool {
 	return false
 }
 
-func requestsHere(e hra.LocalElevatorState, hr hra.HallRequests) bool {
+func requestsHere(e hra.LocalElevatorState, hr hra.HallRequestsType) bool {
 	for btn := 0; btn < elevator.N_BUTTONS; btn++ {
 		if hr[e.Floor][elevio.BT_Cab] {
 			return true
@@ -45,34 +45,34 @@ func requestsHere(e hra.LocalElevatorState, hr hra.HallRequests) bool {
 	return false
 }
 
-func ChooseDirection(e hra.LocalElevatorState) DirnBehaviourPair {
+func ChooseDirection(e hra.LocalElevatorState, hr hra.HallRequestsType) DirnBehaviourPair {
 	switch e.Direction {
 	case elevio.MD_Up:
-		if requestsAbove(e) {
+		if requestsAbove(e, hr) {
 			return DirnBehaviourPair{elevio.MD_Up, elevator.EB_Moving}
-		} else if requestsHere(e) {
+		} else if requestsHere(e, hr) {
 			return DirnBehaviourPair{elevio.MD_Down, elevator.EB_DoorOpen}
-		} else if requestsBelow(e) {
+		} else if requestsBelow(e, hr) {
 			return DirnBehaviourPair{elevio.MD_Down, elevator.EB_Moving}
 		} else {
 			return DirnBehaviourPair{elevio.MD_Stop, elevator.EB_Idle}
 		}
 	case elevio.MD_Down:
-		if requestsBelow(e) {
+		if requestsBelow(e, hr) {
 			return DirnBehaviourPair{elevio.MD_Down, elevator.EB_Moving}
-		} else if requestsHere(e) {
+		} else if requestsHere(e, hr) {
 			return DirnBehaviourPair{elevio.MD_Up, elevator.EB_DoorOpen}
-		} else if requestsAbove(e) {
+		} else if requestsAbove(e, hr) {
 			return DirnBehaviourPair{elevio.MD_Up, elevator.EB_Moving}
 		} else {
 			return DirnBehaviourPair{elevio.MD_Stop, elevator.EB_Idle}
 		}
 	case elevio.MD_Stop:
-		if requestsHere(e) {
+		if requestsHere(e, hr) {
 			return DirnBehaviourPair{elevio.MD_Stop, elevator.EB_DoorOpen}
-		} else if requestsAbove(e) {
+		} else if requestsAbove(e, hr) {
 			return DirnBehaviourPair{elevio.MD_Up, elevator.EB_Moving}
-		} else if requestsBelow(e) {
+		} else if requestsBelow(e, hr) {
 			return DirnBehaviourPair{elevio.MD_Down, elevator.EB_Moving}
 		} else {
 			return DirnBehaviourPair{elevio.MD_Stop, elevator.EB_Idle}
@@ -83,16 +83,16 @@ func ChooseDirection(e hra.LocalElevatorState) DirnBehaviourPair {
 	}
 }
 
-func ShouldStop(e hra.LocalElevatorState, hr hra.HallRequests) bool {
+func ShouldStop(e hra.LocalElevatorState, hr hra.HallRequestsType) bool {
 	switch e.Direction {
 	case elevio.MD_Down:
-		return e.Requests[e.Floor][elevio.BT_HallDown] ||
+		return hr[e.Floor][elevio.BT_HallDown] ||
 			hr[e.Floor][elevio.BT_Cab] ||
-			!requestsBelow(e)
+			!requestsBelow(e, hr)
 	case elevio.MD_Up:
-		return e.Requests[e.Floor][elevio.BT_HallUp] ||
+		return hr[e.Floor][elevio.BT_HallUp] ||
 			hr[e.Floor][elevio.BT_Cab] ||
-			!requestsAbove(e)
+			!requestsAbove(e, hr)
 	default:
 		return true
 	}
@@ -106,27 +106,23 @@ func ShouldClearImmediately(e hra.LocalElevatorState, btn_floor int, btn_type el
 			(btn_type == elevio.BT_Cab))
 }
 
-func ClearAtCurrentFloor(e hra.LocalElevatorState) hra.LocalElevatorState, hr hra.HallRequests {
+func ClearAtCurrentFloor(e hra.LocalElevatorState, hr hra.HallRequestsType) hra.LocalElevatorState {
 	log.Println("In ClearAtCurrentFloor")
 	hr[e.Floor][elevio.BT_Cab] = false
 	switch e.Direction {
 	case elevio.MD_Up:
-		if !requestsAbove(e) && !hr[e.Floor][elevio.BT_Cab] {
-			hr[e.Floor][elevio.BT_Cab]= false
+		if !requestsAbove(e, hr) && !hr[e.Floor][elevio.BT_Cab] {
+			hr[e.Floor][elevio.BT_Cab] = false
 		}
 		hr[e.Floor][elevio.BT_Cab] = false
-		break
-
 	case elevio.MD_Down:
-		if !requestsBelow(e) && !e.Requests[e.Floor][elevio.BT_HallDown] {
-			hr[e.Floor][elevio.BT_Cab]] = false
+		if !requestsBelow(e, hr) && !hr[e.Floor][elevio.BT_HallDown] {
+			hr[e.Floor][elevio.BT_Cab] = false
 		}
 		hr[e.Floor][elevio.BT_Cab] = false
-		break
 	default:
 		hr[e.Floor][elevio.BT_Cab] = false
 		hr[e.Floor][elevio.BT_HallDown] = false
-		break
 	}
 	return e
 }

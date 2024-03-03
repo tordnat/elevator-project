@@ -11,6 +11,7 @@ var (
 	resetChan  chan struct{}
 	timer      *time.Timer
 	timerMutex sync.Mutex
+	Timedout   bool
 )
 
 func Initialize() {
@@ -39,6 +40,7 @@ func Initialize() {
 }
 
 func Start() {
+	Timedout = false
 	timerMutex.Lock()
 	defer timerMutex.Unlock()
 	resetChan <- struct{}{}
