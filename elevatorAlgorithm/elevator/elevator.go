@@ -6,6 +6,7 @@ import (
 
 const N_FLOORS = 4
 const N_BUTTONS = 3
+const N_HALL_BUTTONS = 2
 const DOOR_OPEN_DURATION_S = 2
 
 type ElevatorBehaviour int

@@ -40,20 +40,26 @@ func UpdateFloor(id string, elevatorSystem hra.ElevatorSystem, floor int) hra.El
 }
 
 // Consider encapsulating the variable currentElevatorSystem
+// WARNING: This module assumes only one floor/button changes at a time
 func Transition(id string, currentElevatorSystem hra.ElevatorSystem, updatedElevatorSystem hra.ElevatorSystem, confirmedOrders [][]bool) hra.ElevatorSystem {
 	if currentElevatorSystem.ElevatorStates[id].Floor != updatedElevatorSystem.ElevatorStates[id].Floor {
+		log.Println("Floors changed")
 		currentElevatorSystem = OnFloorArrival(id, updatedElevatorSystem, confirmedOrders)
 	} else {
 		var updatedButton elevio.ButtonEvent
 		buttonIsChanged := false
 		for floor := 0; floor < elevator.N_FLOORS; floor++ {
-			for btn := 0; btn < elevator.N_BUTTONS; btn++ {
+			for btn := 0; btn < elevator.N_HALL_BUTTONS; btn++ {
 				if currentElevatorSystem.HallRequests[floor][btn] != updatedElevatorSystem.HallRequests[floor][btn] {
 					buttonIsChanged = true
 					updatedButton.Button = elevio.ButtonType(btn)
 					updatedButton.Floor = floor
 				}
 			}
+			if currentElevatorSystem.ElevatorStates[id].CabRequests[floor] != updatedElevatorSystem.ElevatorStates[id].CabRequests[floor] {
+				buttonIsChanged = true
+			}
+
 		}
 		if buttonIsChanged {
 			currentElevatorSystem = OnRequestButtonPress(id, updatedElevatorSystem, confirmedOrders, updatedButton)
@@ -95,6 +101,7 @@ func OnRequestButtonPress(id string, elevatorSystem hra.ElevatorSystem, confimed
 }
 
 func OnFloorArrival(id string, elevatorSystem hra.ElevatorSystem, confimedOrders [][]bool) hra.ElevatorSystem {
+	log.Println("On floor arrival")
 	modifiedElevatorState := elevatorSystem.ElevatorStates[id]
 	switch modifiedElevatorState.Behaviour {
 	case elevator.EB_Moving:
