@@ -11,13 +11,26 @@ import (
 )
 
 func main() {
-	var elevatorSystem hra.ElevatorSystem
+	elevatorSystem := hra.ElevatorSystem{
+		HallRequests: [][]int{
+			{0, 0}, {0, 0}, {0, 0}, {0, 0},
+		},
+		ElevatorStates: map[string]hra.LocalElevatorState{
+			"0": {
+				Behaviour:   elevator.EB_Moving,
+				Floor:       2,
+				Direction:   elevio.MD_Up,
+				CabRequests: []int{0, 0, 0, 0},
+			},
+		},
+	}
+	var confirmedOrders [][]bool
 	elevatorID := "0"
 	log.Println("Elevator starting 🛗")
 	elevio.Init("localhost:15657", elevator.N_FLOORS)
 
 	if elevio.GetFloor() == -1 {
-		fsm.OnInitBetweenFloors()
+		elevatorSystem.ElevatorStates[elevatorID] = fsm.OnInitBetweenFloors(elevatorSystem.ElevatorStates[elevatorID])
 	}
 	timer.Initialize()
 	buttonEvent := make(chan elevio.ButtonEvent)
@@ -28,18 +41,29 @@ func main() {
 	go elevio.PollFloorSensor(floorEvent)
 
 	for {
-		//få vekk timer, før go routine, fjerne hr/assigning, dette skal håndteres et annet sted
-		// ++ include obstruction: should just reset timer for door
+		// Somehow remains stuck on init, was to sleeby to fix, sowi
 		select {
-		case updatedElevatorSystem := <-networkDummy:
-			log.Println("Updated elevator system")
 		case event := <-buttonEvent:
 			log.Println("Button event")
+			updatedElevatorSystem := elevatorSystem
+			updatedElevatorSystem.HallRequests[event.Floor][event.Button] = 1
+			networkDummy <- updatedElevatorSystem
 		case event := <-floorEvent:
 			log.Println("Floor event")
-		case <-timer.TimerChan:
+			updatedElevatorSystem := elevatorSystem
+			updatedElevatorState := elevatorSystem.ElevatorStates[elevatorID]
+			updatedElevatorState.Floor = event
+			updatedElevatorSystem.ElevatorStates[elevatorID] = updatedElevatorState
+			networkDummy <- updatedElevatorSystem
+		case <-timer.TimerChan: // Should be able to remain separate since no new orders not known to the network exist in here....probably
 			timer.Timedout = true
-			log.Println("Got timer channel event")
+			fsm.OnDoorTimeOut(elevatorID, elevatorSystem, confirmedOrders)
+		case updatedElevatorSystem := <-networkDummy:
+			// DO SYNC SHIT
+			log.Println("Updated elevator system")
+			encodedElsys := hra.Encode(updatedElevatorSystem)
+			confirmedOrders = hra.Decode(hra.AssignRequests(encodedElsys))[elevatorID] // Shitty oneliner
+			elevatorSystem = fsm.Transition(elevatorID, elevatorSystem, updatedElevatorSystem, confirmedOrders)
 		}
 		time.Sleep(1 * time.Millisecond)
 	}

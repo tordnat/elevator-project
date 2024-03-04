@@ -10,14 +10,23 @@ import (
 	"os/exec"
 )
 
+const (
+	unknownOrder     = 0
+	noOrder          = 1
+	unconfirmedOrder = 2
+	confirmedOrder   = 3
+)
+
 // TODO: Move this to a different file
 type LocalElevatorState struct {
 	Behaviour   elevator.ElevatorBehaviour
 	Floor       int
 	Direction   elevio.MotorDirection
-	CabRequests []bool
+	CabRequests []int
 }
+
 type HallRequestsType [][]int
+
 type ElevatorSystem struct {
 	HallRequests   HallRequestsType
 	ElevatorStates map[string]LocalElevatorState
@@ -39,14 +48,14 @@ type OrderAssignments map[string][][]bool
 
 func elevatorSystemToHraSystem(elevSystem ElevatorSystem) hraElevatorSystem {
 	hraSystem := hraElevatorSystem{
-		HallRequests:   elevSystem.HallRequests,
+		HallRequests:   hraHallRequestTypeToBool(elevSystem.HallRequests),
 		ElevatorStates: make(map[string]hraLocalElevatorState),
 	}
 
 	for id, state := range elevSystem.ElevatorStates {
 		hraState := hraLocalElevatorState{
 			Floor:       state.Floor,
-			CabRequests: state.CabRequests,
+			CabRequests: hraCabRequestTypeToBool(state.CabRequests),
 		}
 
 		switch state.Behaviour {
@@ -82,7 +91,7 @@ func Encode(system ElevatorSystem) string {
 }
 
 func AssignRequests(elevatorStates string) string {
-	out, err := exec.Command("./hall_request_assigner", "-i", (elevatorStates)).Output()
+	out, err := exec.Command("./hall_request_assigner_macos", "-i", (elevatorStates)).Output()
 	if err != nil {
 		fmt.Println("Error ", err)
 	}
@@ -96,4 +105,31 @@ func Decode(hraString string) OrderAssignments {
 		fmt.Println("Error ", err)
 	}
 	return result
+}
+
+func hraHallRequestTypeToBool(requests HallRequestsType) [][]bool {
+	retArr := make([][]bool, len(requests))
+	for i, row := range requests {
+		retArr[i] = make([]bool, len(row))
+		for j, req := range row {
+			if req == confirmedOrder {
+				retArr[i][j] = true
+			} else {
+				retArr[i][j] = false
+			}
+		}
+	}
+	return retArr
+}
+
+func hraCabRequestTypeToBool(requests []int) []bool {
+	retArr := make([]bool, len(requests))
+	for i, req := range requests {
+		if req == confirmedOrder {
+			retArr[i] = true
+		} else {
+			retArr[i] = false
+		}
+	}
+	return retArr
 }
