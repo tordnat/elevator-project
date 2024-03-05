@@ -17,12 +17,13 @@ const (
 	EB_Moving
 )
 
-type Elevator struct {
-	Floor     int
-	Dirn      elevio.MotorDirection
-	Requests  [N_FLOORS][N_BUTTONS]bool
+type ElevatorState struct {
 	Behaviour ElevatorBehaviour
+	Floor     int
+	Direction elevio.MotorDirection
+	Requests  [][]bool //This should be filled from HRA
 }
+type Order elevio.ButtonEvent
 
 func eb_toString(eb ElevatorBehaviour) string {
 	if eb == EB_Idle {

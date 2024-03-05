@@ -2,7 +2,6 @@ package requests
 
 import (
 	"elevatorAlgorithm/elevator"
-	"elevatorAlgorithm/hra"
 	"elevatorDriver/elevio"
 	"log"
 )
@@ -12,9 +11,8 @@ type DirnBehaviourPair struct {
 	Behaviour elevator.ElevatorBehaviour
 }
 
-// This is ambiguous, change the name
-func requestsAbove(e hra.LocalElevatorState, confirmedOrders [][]bool) bool {
-	for f := e.Floor + 1; f < elevator.N_FLOORS; f++ {
+func requestsAbove(currentFloor int, confirmedOrders [][]bool) bool {
+	for f := currentFloor + 1; f < elevator.N_FLOORS; f++ {
 		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
 			if confirmedOrders[f][btn] {
 				return true
@@ -24,9 +22,8 @@ func requestsAbove(e hra.LocalElevatorState, confirmedOrders [][]bool) bool {
 	return false
 }
 
-// This is ambiguous, change the name
-func requestsBelow(e hra.LocalElevatorState, confirmedOrders [][]bool) bool {
-	for f := 0; f < e.Floor; f++ {
+func requestsBelow(currentFloor int, confirmedOrders [][]bool) bool {
+	for f := 0; f < currentFloor; f++ {
 		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
 			if confirmedOrders[f][btn] {
 				return true
@@ -36,43 +33,43 @@ func requestsBelow(e hra.LocalElevatorState, confirmedOrders [][]bool) bool {
 	return false
 }
 
-func requestsHere(e hra.LocalElevatorState, confirmedOrders [][]bool) bool {
+func requestsHere(currentFloor int, confirmedOrders [][]bool) bool {
 	for btn := 0; btn < elevator.N_BUTTONS; btn++ {
-		if confirmedOrders[e.Floor][elevio.BT_Cab] {
+		if confirmedOrders[currentFloor][elevio.BT_Cab] {
 			return true
 		}
 	}
 	return false
 }
 
-func ChooseDirection(e hra.LocalElevatorState, confirmedOrders [][]bool) DirnBehaviourPair {
-	switch e.Direction {
+func ChooseDirection(direction elevio.MotorDirection, floor int, confirmedOrders [][]bool) DirnBehaviourPair {
+	switch direction {
 	case elevio.MD_Up:
-		if requestsAbove(e, confirmedOrders) {
+		if requestsAbove(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Up, elevator.EB_Moving}
-		} else if requestsHere(e, confirmedOrders) {
+		} else if requestsHere(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Down, elevator.EB_DoorOpen}
-		} else if requestsBelow(e, confirmedOrders) {
+		} else if requestsBelow(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Down, elevator.EB_Moving}
 		} else {
 			return DirnBehaviourPair{elevio.MD_Stop, elevator.EB_Idle}
 		}
 	case elevio.MD_Down:
-		if requestsBelow(e, confirmedOrders) {
+		if requestsBelow(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Down, elevator.EB_Moving}
-		} else if requestsHere(e, confirmedOrders) {
+		} else if requestsHere(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Up, elevator.EB_DoorOpen}
-		} else if requestsAbove(e, confirmedOrders) {
+		} else if requestsAbove(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Up, elevator.EB_Moving}
 		} else {
 			return DirnBehaviourPair{elevio.MD_Stop, elevator.EB_Idle}
 		}
 	case elevio.MD_Stop:
-		if requestsHere(e, confirmedOrders) {
+		if requestsHere(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Stop, elevator.EB_DoorOpen}
-		} else if requestsAbove(e, confirmedOrders) {
+		} else if requestsAbove(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Up, elevator.EB_Moving}
-		} else if requestsBelow(e, confirmedOrders) {
+		} else if requestsBelow(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Down, elevator.EB_Moving}
 		} else {
 			return DirnBehaviourPair{elevio.MD_Stop, elevator.EB_Idle}
@@ -83,46 +80,47 @@ func ChooseDirection(e hra.LocalElevatorState, confirmedOrders [][]bool) DirnBeh
 	}
 }
 
-func ShouldStop(e hra.LocalElevatorState, confirmedOrders [][]bool) bool {
-	switch e.Direction {
+func ShouldStop(direction elevio.MotorDirection, floor int, confirmedOrders [][]bool) bool {
+	switch direction {
 	case elevio.MD_Down:
-		return confirmedOrders[e.Floor][elevio.BT_HallDown] ||
-			confirmedOrders[e.Floor][elevio.BT_Cab] ||
-			!requestsBelow(e, confirmedOrders)
+		return confirmedOrders[floor][elevio.BT_HallDown] ||
+			confirmedOrders[floor][elevio.BT_Cab] ||
+			!requestsBelow(floor, confirmedOrders)
 	case elevio.MD_Up:
-		return confirmedOrders[e.Floor][elevio.BT_HallUp] ||
-			confirmedOrders[e.Floor][elevio.BT_Cab] ||
-			!requestsAbove(e, confirmedOrders)
+		return confirmedOrders[floor][elevio.BT_HallUp] ||
+			confirmedOrders[floor][elevio.BT_Cab] ||
+			!requestsAbove(floor, confirmedOrders)
 	default:
 		return true
 	}
 }
 
-func ShouldClearImmediately(e hra.LocalElevatorState, floor int, btn_type elevio.ButtonType) bool {
-	return e.Floor == floor &&
-		(((e.Direction == elevio.MD_Up) && (btn_type == elevio.BT_HallUp)) ||
-			((e.Direction == elevio.MD_Down) && (btn_type == elevio.BT_HallDown)) ||
-			(e.Direction == elevio.MD_Stop) ||
-			(btn_type == elevio.BT_Cab))
+func ShouldClearImmediately(currentFloor int, currentDir elevio.MotorDirection, orderEvent elevator.Order) bool {
+	return currentFloor == orderEvent.Floor &&
+		(((currentDir == elevio.MD_Up) && (orderEvent.Button == elevio.BT_HallUp)) ||
+			((currentDir == elevio.MD_Down) && (orderEvent.Button == elevio.BT_HallDown)) ||
+			(currentDir == elevio.MD_Stop) ||
+			(orderEvent.Button == elevio.BT_Cab))
 }
 
-func ClearAtCurrentFloor(e hra.LocalElevatorState, confirmedOrders [][]bool) hra.LocalElevatorState {
+// This function needs to implement a channel to clear hall and or cab requests
+func ClearAtCurrentFloor(e elevator.ElevatorState) elevator.ElevatorState {
 	log.Println("In ClearAtCurrentFloor")
-	confirmedOrders[e.Floor][elevio.BT_Cab] = false
+	e.Requests[e.Floor][elevio.BT_Cab] = false
 	switch e.Direction {
 	case elevio.MD_Up:
-		if !requestsAbove(e, confirmedOrders) && !confirmedOrders[e.Floor][elevio.BT_Cab] {
-			confirmedOrders[e.Floor][elevio.BT_Cab] = false
+		if !requestsAbove(e.Floor, e.Requests) && !e.Requests[e.Floor][elevio.BT_Cab] {
+			e.Requests[e.Floor][elevio.BT_Cab] = false
 		}
-		confirmedOrders[e.Floor][elevio.BT_Cab] = false
+		e.Requests[e.Floor][elevio.BT_Cab] = false
 	case elevio.MD_Down:
-		if !requestsBelow(e, confirmedOrders) && !confirmedOrders[e.Floor][elevio.BT_HallDown] {
-			confirmedOrders[e.Floor][elevio.BT_Cab] = false
+		if !requestsBelow(e.Floor, e.Requests) && !e.Requests[e.Floor][elevio.BT_HallDown] {
+			e.Requests[e.Floor][elevio.BT_Cab] = false
 		}
-		confirmedOrders[e.Floor][elevio.BT_Cab] = false
+		e.Requests[e.Floor][elevio.BT_Cab] = false
 	default:
-		confirmedOrders[e.Floor][elevio.BT_Cab] = false
-		confirmedOrders[e.Floor][elevio.BT_HallDown] = false
+		e.Requests[e.Floor][elevio.BT_Cab] = false
+		e.Requests[e.Floor][elevio.BT_HallDown] = false
 	}
 	return e
 }

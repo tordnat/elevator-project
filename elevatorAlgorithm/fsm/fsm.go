@@ -2,15 +2,41 @@ package fsm
 
 import (
 	"elevatorAlgorithm/elevator"
-	"elevatorAlgorithm/hra"
 	"elevatorAlgorithm/requests"
 	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
 	"log"
 )
 
-/// TODO: Use type OrderAssignments map[string][][]bool
-/// instead of elevatorSystem.hra ?? +
+// IMPORTANT: functions should either be completly pure,
+// or they should communicate using channels and hardware.
+// E.g execution of actions vs mutating data
+// State transition functions may be the only exception, they return the new state. We could change the functions to be pure and return a list of HW actions, but a bit bloated?
+// There is no need to use terminology like confirmed orders here. Alle orders are bools in the fsm, therefore they are simply orders.
+
+func FSM(orderAssignment chan elevator.Order, orderCompleted chan elevator.Order, floorEvent chan int, obstructionEvent chan bool) {
+	elevState := elevator.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop, make([][]bool, 3*4)} //This 2d array should be properly filled
+	//Get elevState to a defined state here
+	select {
+	case event := <-orderAssignment: //Analogue of button press
+		log.Println("New assignemtn ", event)
+		elevState = OnRequestButtonPress(elevState, event)
+
+	case event := <-floorEvent:
+		log.Println("Sending", event)
+		elevState = OnFloorArrival(elevState)
+
+	case <-timer.TimerChan:
+		log.Println("Door timeout")
+		timer.Timedout = true
+		OnDoorTimeOut(elevState)
+
+	case <-obstructionEvent:
+		if elevState.Behaviour == elevator.EB_DoorOpen {
+			timer.Start()
+		}
+	}
+}
 
 func setAllLights(confirmedOrders [][]bool) {
 	for floor := 0; floor < elevator.N_FLOORS; floor++ {
@@ -20,123 +46,76 @@ func setAllLights(confirmedOrders [][]bool) {
 	}
 }
 
-func OnInitBetweenFloors(e hra.LocalElevatorState) hra.LocalElevatorState {
+func OnInitBetweenFloors(e elevator.ElevatorState) elevator.ElevatorState {
 	elevio.SetMotorDirection(elevio.MD_Down)
 	e.Direction = elevio.MD_Down
 	e.Behaviour = elevator.EB_Moving
 	return e
 }
 
-func UpdateButtonRequest(elevatorSystem hra.ElevatorSystem, buttonEvent elevio.ButtonEvent) hra.ElevatorSystem {
-	elevatorSystem.HallRequests[buttonEvent.Floor][buttonEvent.Button] = 1
-	return elevatorSystem
-}
-
-func UpdateFloor(id string, elevatorSystem hra.ElevatorSystem, floor int) hra.ElevatorSystem {
-	modifiedElevatorState := elevatorSystem.ElevatorStates[id]
-	modifiedElevatorState.Floor = floor
-	elevatorSystem.ElevatorStates[id] = modifiedElevatorState
-	return elevatorSystem
-}
-
-// Consider encapsulating the variable currentElevatorSystem
-// WARNING: This module assumes only one floor/button changes at a time
-func Transition(id string, currentElevatorSystem hra.ElevatorSystem, updatedElevatorSystem hra.ElevatorSystem, confirmedOrders [][]bool) hra.ElevatorSystem {
-	if currentElevatorSystem.ElevatorStates[id].Floor != updatedElevatorSystem.ElevatorStates[id].Floor {
-		log.Println("Floors changed")
-		currentElevatorSystem = OnFloorArrival(id, updatedElevatorSystem, confirmedOrders)
-	} else {
-		var updatedButton elevio.ButtonEvent
-		buttonIsChanged := false
-		for floor := 0; floor < elevator.N_FLOORS; floor++ {
-			for btn := 0; btn < elevator.N_HALL_BUTTONS; btn++ {
-				if currentElevatorSystem.HallRequests[floor][btn] != updatedElevatorSystem.HallRequests[floor][btn] {
-					buttonIsChanged = true
-					updatedButton.Button = elevio.ButtonType(btn)
-					updatedButton.Floor = floor
-				}
-			}
-			if currentElevatorSystem.ElevatorStates[id].CabRequests[floor] != updatedElevatorSystem.ElevatorStates[id].CabRequests[floor] {
-				buttonIsChanged = true
-			}
-
-		}
-		if buttonIsChanged {
-			currentElevatorSystem = OnRequestButtonPress(id, updatedElevatorSystem, confirmedOrders, updatedButton)
-		}
-	}
-	return currentElevatorSystem
-}
-
-func OnRequestButtonPress(id string, elevatorSystem hra.ElevatorSystem, confimedOrders [][]bool, buttonEvent elevio.ButtonEvent) hra.ElevatorSystem {
-	modifiedElevatorState := elevatorSystem.ElevatorStates[id]
-
-	switch modifiedElevatorState.Behaviour {
+// Can this handle multiple order reassignments. Looks like it, so should work with HRA
+func OnRequestButtonPress(elevState elevator.ElevatorState, orderEvent elevator.Order) elevator.ElevatorState {
+	switch elevState.Behaviour {
 	case elevator.EB_DoorOpen:
-		if requests.ShouldClearImmediately(modifiedElevatorState, buttonEvent.Floor, buttonEvent.Button) {
-			confimedOrders[buttonEvent.Floor][buttonEvent.Button] = false
+		if requests.ShouldClearImmediately(elevState.Floor, elevState.Direction, orderEvent) {
+			//Clear order by channel here (spesific order)
 			log.Println("Clearing order!")
 			timer.Start()
 		}
 	case elevator.EB_Idle:
-		pair := requests.ChooseDirection(modifiedElevatorState, confimedOrders)
+		pair := requests.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Requests)
 
-		modifiedElevatorState.Direction = pair.Dir // Change to Direction instead of Dir
-		modifiedElevatorState.Behaviour = pair.Behaviour
+		elevState.Direction = pair.Dir
+		elevState.Behaviour = pair.Behaviour
 
 		switch pair.Behaviour {
 		case elevator.EB_DoorOpen:
 			elevio.SetDoorOpenLamp(true)
 			timer.Start()
-			confimedOrders[buttonEvent.Floor][buttonEvent.Button] = false
+			//Clear order by channel here (ClearAtCurrentFloor)
 			log.Println("Clearing order!")
 		case elevator.EB_Moving:
-			elevio.SetMotorDirection(modifiedElevatorState.Direction)
+			elevio.SetMotorDirection(elevState.Direction)
 		}
 	}
-	setAllLights(confimedOrders)
-	elevatorSystem.ElevatorStates[id] = modifiedElevatorState
-	return elevatorSystem
+	setAllLights(elevState.Requests)
+	return elevState
 
 }
 
-func OnFloorArrival(id string, elevatorSystem hra.ElevatorSystem, confimedOrders [][]bool) hra.ElevatorSystem {
+func OnFloorArrival(elevState elevator.ElevatorState) elevator.ElevatorState {
 	log.Println("On floor arrival")
-	modifiedElevatorState := elevatorSystem.ElevatorStates[id]
-	switch modifiedElevatorState.Behaviour {
+	switch elevState.Behaviour {
 	case elevator.EB_Moving:
-		if requests.ShouldStop(modifiedElevatorState, confimedOrders) {
+		if requests.ShouldStop(elevState.Direction, elevState.Floor, elevState.Requests) {
 			elevio.SetMotorDirection(elevio.MD_Stop)
-			modifiedElevatorState = requests.ClearAtCurrentFloor(modifiedElevatorState, confimedOrders)
-			setAllLights(confimedOrders)
+			//Clear order by channel here (ClearAtCurrentFloor)
+			setAllLights(elevState.Requests)
 			elevio.SetDoorOpenLamp(true)
 			timer.Start()
-			modifiedElevatorState.Behaviour = elevator.EB_DoorOpen
+			elevState.Behaviour = elevator.EB_DoorOpen
 		}
 	}
-	elevatorSystem.ElevatorStates[id] = modifiedElevatorState
-	return elevatorSystem
+	return elevState
 }
 
-func OnDoorTimeOut(id string, elevatorSystem hra.ElevatorSystem, confirmedOrders [][]bool) hra.LocalElevatorState {
-	modifiedElevatorState := elevatorSystem.ElevatorStates[id]
-	switch modifiedElevatorState.Behaviour {
+func OnDoorTimeOut(elevState elevator.ElevatorState) {
+	switch elevState.Behaviour {
 	case elevator.EB_DoorOpen:
-		pair := requests.ChooseDirection(modifiedElevatorState, confirmedOrders)
-		modifiedElevatorState.Direction = pair.Dir
-		modifiedElevatorState.Behaviour = pair.Behaviour
+		pair := requests.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Requests)
+		elevState.Direction = pair.Dir
+		elevState.Behaviour = pair.Behaviour
 
-		switch modifiedElevatorState.Behaviour {
+		switch elevState.Behaviour {
 		case elevator.EB_DoorOpen:
 			timer.Start()
-			modifiedElevatorState = requests.ClearAtCurrentFloor(modifiedElevatorState, confirmedOrders) // This should be fine since orders are confirmed
-			setAllLights(confirmedOrders)
+			//Clear order by channel here (ClearAtCurrentFloor)
+			setAllLights(elevState.Requests)
 		case elevator.EB_Idle:
 			elevio.SetDoorOpenLamp(false)
-			elevio.SetMotorDirection(modifiedElevatorState.Direction)
+			elevio.SetMotorDirection(elevState.Direction)
 		case elevator.EB_Moving:
 			elevio.SetDoorOpenLamp(false)
 		}
 	}
-	return modifiedElevatorState
 }
