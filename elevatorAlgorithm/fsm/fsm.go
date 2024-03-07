@@ -8,19 +8,33 @@ import (
 	"log"
 )
 
+type ClearFloorOrders struct {
+	Floor    int
+	HallUp   bool
+	HallDown bool
+	Cab      bool
+}
+
 // IMPORTANT: functions should either be completly pure,
 // or they should communicate using channels and hardware.
 // E.g execution of actions vs mutating data
 // State transition functions may be the only exception, they return the new state. We could change the functions to be pure and return a list of HW actions, but a bit bloated?
 // There is no need to use terminology like confirmed orders here. Alle orders are bools in the fsm, therefore they are simply orders.
 
-func FSM(orderAssignment chan elevator.Order, orderCompleted chan elevator.Order, floorEvent chan int, obstructionEvent chan bool) {
+func FSM(orderAssignment chan elevator.Order, clearOrders chan ClearFloorOrders, floorEvent chan int, obstructionEvent chan bool) {
 	elevState := elevator.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop, make([][]bool, 3*4)} //This 2d array should be properly filled
 	//Get elevState to a defined state here
+	log.Println("Initializing")
+	elevState.Floor = elevio.GetFloor()
+	if elevState.Floor == -1 {
+		elevState = OnInitBetweenFloors(elevState)
+	}
+
 	select {
 	case event := <-orderAssignment: //Analogue of button press
-		log.Println("New assignemtn ", event)
-		elevState = OnRequestButtonPress(elevState, event)
+		log.Println("New assignment ", event)
+		clearOrders <- newReqClear(elevState, event)
+		elevState.Behaviour, elevState.Direction = onNewRequest(elevState, event)
 
 	case event := <-floorEvent:
 		log.Println("Sending", event)
@@ -29,7 +43,10 @@ func FSM(orderAssignment chan elevator.Order, orderCompleted chan elevator.Order
 	case <-timer.TimerChan:
 		log.Println("Door timeout")
 		timer.Timedout = true
-		OnDoorTimeOut(elevState)
+		elevState.Behaviour, elevState.Direction = OnDoorTimeOut(elevState)
+		if elevState.Behaviour == elevator.EB_DoorOpen {
+			clearOrders <- ClearFloorOrders{elevState.Floor, true, true, true}
+		}
 
 	case <-obstructionEvent:
 		if elevState.Behaviour == elevator.EB_DoorOpen {
@@ -53,13 +70,38 @@ func OnInitBetweenFloors(e elevator.ElevatorState) elevator.ElevatorState {
 	return e
 }
 
-// Can this handle multiple order reassignments. Looks like it, so should work with HRA
-func OnRequestButtonPress(elevState elevator.ElevatorState, orderEvent elevator.Order) elevator.ElevatorState {
+func newReqClear(elevState elevator.ElevatorState, orderEvent elevator.Order) ClearFloorOrders {
+	var clearOrder ClearFloorOrders
 	switch elevState.Behaviour {
 	case elevator.EB_DoorOpen:
 		if requests.ShouldClearImmediately(elevState.Floor, elevState.Direction, orderEvent) {
-			//Clear order by channel here (spesific order)
-			log.Println("Clearing order!")
+			clearOrder.Floor = orderEvent.Floor
+			clearOrder.Cab = true
+			return clearOrder
+		}
+	case elevator.EB_Idle:
+		pair := requests.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Requests)
+
+		elevState.Direction = pair.Dir
+		elevState.Behaviour = pair.Behaviour
+
+		switch pair.Behaviour {
+		case elevator.EB_DoorOpen:
+			clearOrder.Floor = elevState.Floor
+			cabOrder := requests.ClearCab(elevState.Floor)
+			clearOrder.Cab = true
+			clearOrder.HallUp = true
+			clearOrder.HallDown = true
+			return clearOrder
+		}
+	}
+	return ClearFloorOrders{-1, false, false, false}
+}
+
+func onNewRequest(elevState elevator.ElevatorState, orderEvent elevator.Order) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
+	switch elevState.Behaviour {
+	case elevator.EB_DoorOpen:
+		if requests.ShouldClearImmediately(elevState.Floor, elevState.Direction, orderEvent) {
 			timer.Start()
 		}
 	case elevator.EB_Idle:
@@ -72,15 +114,12 @@ func OnRequestButtonPress(elevState elevator.ElevatorState, orderEvent elevator.
 		case elevator.EB_DoorOpen:
 			elevio.SetDoorOpenLamp(true)
 			timer.Start()
-			//Clear order by channel here (ClearAtCurrentFloor)
-			log.Println("Clearing order!")
 		case elevator.EB_Moving:
 			elevio.SetMotorDirection(elevState.Direction)
 		}
 	}
 	setAllLights(elevState.Requests)
-	return elevState
-
+	return elevState.Behaviour, elevState.Direction
 }
 
 func OnFloorArrival(elevState elevator.ElevatorState) elevator.ElevatorState {
@@ -89,7 +128,9 @@ func OnFloorArrival(elevState elevator.ElevatorState) elevator.ElevatorState {
 	case elevator.EB_Moving:
 		if requests.ShouldStop(elevState.Direction, elevState.Floor, elevState.Requests) {
 			elevio.SetMotorDirection(elevio.MD_Stop)
-			//Clear order by channel here (ClearAtCurrentFloor)
+			requests.ClearCab()
+			requests.ClearHallUp()
+			requests.ClearHallDown()
 			setAllLights(elevState.Requests)
 			elevio.SetDoorOpenLamp(true)
 			timer.Start()
@@ -99,7 +140,7 @@ func OnFloorArrival(elevState elevator.ElevatorState) elevator.ElevatorState {
 	return elevState
 }
 
-func OnDoorTimeOut(elevState elevator.ElevatorState) {
+func OnDoorTimeOut(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
 	switch elevState.Behaviour {
 	case elevator.EB_DoorOpen:
 		pair := requests.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Requests)
@@ -109,7 +150,6 @@ func OnDoorTimeOut(elevState elevator.ElevatorState) {
 		switch elevState.Behaviour {
 		case elevator.EB_DoorOpen:
 			timer.Start()
-			//Clear order by channel here (ClearAtCurrentFloor)
 			setAllLights(elevState.Requests)
 		case elevator.EB_Idle:
 			elevio.SetDoorOpenLamp(false)
@@ -118,4 +158,5 @@ func OnDoorTimeOut(elevState elevator.ElevatorState) {
 			elevio.SetDoorOpenLamp(false)
 		}
 	}
+	return elevState.Behaviour, elevState.Direction
 }

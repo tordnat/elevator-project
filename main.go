@@ -18,11 +18,6 @@ func main() {
 	log.Println("Elevator starting 🛗")
 	elevio.Init("localhost:15657", elevator.N_FLOORS)
 
-	/* Fix this to fit with new FSM
-	if elevio.GetFloor() == -1 {
-		elevatorSystem.ElevatorStates[elevatorID] = fsm.OnInitBetweenFloors(elevatorSystem.ElevatorStates[elevatorID])
-	}
-	*/
 	timer.Initialize()
 	buttonEvent := make(chan elevio.ButtonEvent)
 	floorEvent := make(chan int)

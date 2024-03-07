@@ -3,7 +3,6 @@ package requests
 import (
 	"elevatorAlgorithm/elevator"
 	"elevatorDriver/elevio"
-	"log"
 )
 
 type DirnBehaviourPair struct {
@@ -103,24 +102,49 @@ func ShouldClearImmediately(currentFloor int, currentDir elevio.MotorDirection, 
 			(orderEvent.Button == elevio.BT_Cab))
 }
 
-// This function needs to implement a channel to clear hall and or cab requests
-func ClearAtCurrentFloor(e elevator.ElevatorState) elevator.ElevatorState {
-	log.Println("In ClearAtCurrentFloor")
-	e.Requests[e.Floor][elevio.BT_Cab] = false
+func ClearCab(floor int) elevator.Order {
+	var orderToClear elevator.Order
+	orderToClear.Button = elevio.BT_Cab
+	orderToClear.Floor = floor
+	return orderToClear
+}
+
+func ClearHallUp(e elevator.ElevatorState) elevator.Order {
+	var orderToClear elevator.Order
+	orderToClear.Floor = e.Floor
+	orderToClear.Button = elevio.BT_HallUp
+
 	switch e.Direction {
 	case elevio.MD_Up:
-		if !requestsAbove(e.Floor, e.Requests) && !e.Requests[e.Floor][elevio.BT_Cab] {
-			e.Requests[e.Floor][elevio.BT_Cab] = false
-		}
-		e.Requests[e.Floor][elevio.BT_Cab] = false
+		return orderToClear
+
 	case elevio.MD_Down:
 		if !requestsBelow(e.Floor, e.Requests) && !e.Requests[e.Floor][elevio.BT_HallDown] {
-			e.Requests[e.Floor][elevio.BT_Cab] = false
+			return orderToClear
 		}
-		e.Requests[e.Floor][elevio.BT_Cab] = false
+
 	default:
-		e.Requests[e.Floor][elevio.BT_Cab] = false
-		e.Requests[e.Floor][elevio.BT_HallDown] = false
+		return orderToClear
 	}
-	return e
+
+	return elevator.Order{-1, -1}
+}
+
+func ClearHallDown(e elevator.ElevatorState) elevator.Order {
+	var orderToClear elevator.Order
+	orderToClear.Floor = e.Floor
+	orderToClear.Button = elevio.BT_HallDown
+
+	switch e.Direction {
+	case elevio.MD_Up:
+		if !requestsAbove(e.Floor, e.Requests) && !e.Requests[e.Floor][elevio.BT_HallUp] {
+			return orderToClear
+		}
+	case elevio.MD_Down:
+		return orderToClear
+	default:
+		return orderToClear
+	}
+
+	return elevator.Order{-1, -1}
 }

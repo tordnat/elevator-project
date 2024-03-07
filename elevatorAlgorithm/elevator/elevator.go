@@ -23,6 +23,7 @@ type ElevatorState struct {
 	Direction elevio.MotorDirection
 	Requests  [][]bool //This should be filled from HRA
 }
+
 type Order elevio.ButtonEvent
 
 func eb_toString(eb ElevatorBehaviour) string {
