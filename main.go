@@ -9,12 +9,13 @@ import (
 	"fmt"
 	"log"
 	"networkDriver/bcast"
+	"time"
 )
 
 const bcastPort int = 25565
 
 func main() {
-	elevatorID := "0"
+	// elevatorID := "0"
 	log.Println("Elevator starting 🛗")
 	elevio.Init("localhost:15657", elevator.N_FLOORS)
 
@@ -32,20 +33,36 @@ func main() {
 	go bcast.Transmitter(bcastPort, networkTransmitter)
 
 	//All channels of FSM go here
-	orderAssignment := make(chan elevator.Order) // This type is perhaps a bit weirdly defined. Events to this channel should be generated from HRA assignments.
-	orderCompleted := make(chan elevator.Order)  //TODO: handle completed order deletion. Maybe a channel is overkill
+	orderAssignment := make(chan elevator.Order)      // This type is perhaps a bit weirdly defined. Events to this channel should be generated from HRA assignments.
+	orderCompleted := make(chan fsm.ClearFloorOrders) //TODO: handle completed order deletion. Maybe a channel is overkill
 
 	go fsm.FSM(orderAssignment, orderCompleted, floorEvent, obstructionEvent) //maybe add timer also?
-	go orderEventGenerator(orderAssignment, networkReciever, elevatorID)
+	//go orderEventGenerator(orderAssignment, networkReciever, elevatorID)
+	go removeOrder(orderCompleted)
+	go test(orderAssignment)
 	for {
 	}
 }
 
-// TODO: Make this function generate orderAssignement events based on HRA output. Bascially it only sends an assignment if it's new, like a button press
-//This function is not really a final implementation, but something that is easy to take appart to merge with other parts of the system
-//Also: A better implementation is to not base the FSM on only getting a single new order. Simple fix now is to just send requests successively.
-//Main problem is that we have no way of clearing orders from the FSM without it clearing them itself. This is why we need clearing on a sperate channel
+func removeOrder(orderCompletionRequestTVchannel chan fsm.ClearFloorOrders) {
+	for order := range orderCompletionRequestTVchannel {
+		log.Println("Order my ballz", order)
+	}
+}
 
+// TODO: Make this function generate orderAssignement events based on HRA output. Bascially it only sends an assignment if it's new, like a button press
+// This function is not really a final implementation, but something that is easy to take appart to merge with other parts of the system
+// Also: A better implementation is to not base the FSM on only getting a single new order. Simple fix now is to just send requests successively.
+// Main problem is that we have no way of clearing orders from the FSM without it clearing them itself. This is why we need clearing on a sperate channel
+func test(orderAssignment chan elevator.Order) {
+	time.Sleep(5 * time.Second)
+	log.Println("Sending assignment")
+	orderAssignment <- elevator.Order{Floor: 1, Button: elevio.BT_HallDown}
+	log.Println("Sent assignment")
+	time.Sleep(5 * time.Second)
+	orderAssignment <- elevator.Order{Floor: 3, Button: elevio.BT_HallDown}
+
+}
 func orderEventGenerator(orderAssignment chan elevator.Order, networkReciever chan hra.ElevatorSystem, elevatorID string) {
 	var oldAssignments [][]bool
 	for networkMsg := range networkReciever {

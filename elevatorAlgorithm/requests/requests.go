@@ -102,49 +102,20 @@ func ShouldClearImmediately(currentFloor int, currentDir elevio.MotorDirection, 
 			(orderEvent.Button == elevio.BT_Cab))
 }
 
-func ClearCab(floor int) elevator.Order {
-	var orderToClear elevator.Order
-	orderToClear.Button = elevio.BT_Cab
-	orderToClear.Floor = floor
-	return orderToClear
+func ShouldClearHallUp(floor int, dir elevio.MotorDirection, requests [][]bool) bool {
+	if dir == elevio.MD_Down {
+		if requestsBelow(floor, requests) || requests[floor][elevio.BT_HallDown] {
+			return false
+		}
+	}
+	return true
 }
 
-func ClearHallUp(e elevator.ElevatorState) elevator.Order {
-	var orderToClear elevator.Order
-	orderToClear.Floor = e.Floor
-	orderToClear.Button = elevio.BT_HallUp
-
-	switch e.Direction {
-	case elevio.MD_Up:
-		return orderToClear
-
-	case elevio.MD_Down:
-		if !requestsBelow(e.Floor, e.Requests) && !e.Requests[e.Floor][elevio.BT_HallDown] {
-			return orderToClear
+func ShouldClearHallDown(floor int, dir elevio.MotorDirection, requests [][]bool) bool {
+	if dir == elevio.MD_Up {
+		if requestsAbove(floor, requests) || requests[floor][elevio.BT_HallUp] {
+			return false
 		}
-
-	default:
-		return orderToClear
 	}
-
-	return elevator.Order{-1, -1}
-}
-
-func ClearHallDown(e elevator.ElevatorState) elevator.Order {
-	var orderToClear elevator.Order
-	orderToClear.Floor = e.Floor
-	orderToClear.Button = elevio.BT_HallDown
-
-	switch e.Direction {
-	case elevio.MD_Up:
-		if !requestsAbove(e.Floor, e.Requests) && !e.Requests[e.Floor][elevio.BT_HallUp] {
-			return orderToClear
-		}
-	case elevio.MD_Down:
-		return orderToClear
-	default:
-		return orderToClear
-	}
-
-	return elevator.Order{-1, -1}
+	return true
 }
