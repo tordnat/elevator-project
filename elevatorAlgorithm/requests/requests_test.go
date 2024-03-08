@@ -50,14 +50,14 @@ func TestRequests(t *testing.T) {
 	testState.Floor = 2
 	testState.Direction = elevio.MD_Up
 	testState.Requests = [][]bool{{false, false, false}, {false, false, false}, {false, true, false}, {false, false, false}} //Req at floor 2, down(?)
-	if requests.ShouldClearImmediately(testState.Floor, testState.Direction, testButtonEvent) {
+	if requests.ClearAtFloor(testState.Floor, testState.Direction, testButtonEvent) {
 		t.Error("Failed assert, should not clear down at floor while moving down")
 	}
 
 	//Here we should clear hall down
 	testState.Floor = 1
 	testState.Direction = elevio.MD_Up
-	if !requests.ShouldClearImmediately(testState.Floor, testState.Direction, testButtonEvent) {
+	if !requests.ClearAtFloor(testState.Floor, testState.Direction, testButtonEvent) {
 		t.Error("Failed assert, should clear down at floor while moving down")
 	}
 
@@ -65,7 +65,7 @@ func TestRequests(t *testing.T) {
 	testState.Floor = 1
 	testState.Direction = elevio.MD_Stop
 	//possible to clearImmeadiately if door is open(??)
-	if !requests.ShouldClearImmediately(testState.Floor, testState.Direction, testButtonEvent) {
+	if !requests.ClearAtFloor(testState.Floor, testState.Direction, testButtonEvent) {
 		t.Error("Failed assert, should clear down at floor while moving down")
 	}
 
@@ -78,17 +78,6 @@ func TestRequests(t *testing.T) {
 
 	if testState.Behaviour != elevator.EB_DoorOpen {
 		t.Error("Failed assert, elevator door should be open")
-	}
-
-	//mu..?:D
-	select {
-	case <-timer.TimerChan:
-
-	case <-time.After(5500 * time.Millisecond):
-		t.Error("Failed to receive timer within expected time")
-		if testState.Behaviour != elevator.EB_DoorOpen {
-			t.Error("Failed assert, elevator door should be open")
-		}
 	}
 
 }

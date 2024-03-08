@@ -10,6 +10,12 @@ type DirnBehaviourPair struct {
 	Dir       elevio.MotorDirection
 	Behaviour elevator.ElevatorBehaviour
 }
+type ClearFloorOrders struct {
+	Floor    int
+	HallUp   bool
+	HallDown bool
+	Cab      bool
+}
 
 func requestsAbove(currentFloor int, confirmedOrders [][]bool) bool {
 	for f := currentFloor + 1; f < elevator.N_FLOORS; f++ {
@@ -79,6 +85,18 @@ func ChooseDirection(direction elevio.MotorDirection, floor int, confirmedOrders
 
 	}
 }
+func HaveOrders(currentFloor int, confirmedOrders [][]bool) {
+	if requestsHere(currentFloor, confirmedOrders) {
+		return true
+	}
+	if requestsAbove(currentFloor, confirmedOrders) {
+		return true
+	}
+	if requestsBelow(currentFloor, confirmedOrders) {
+		return true
+	}
+	return false
+}
 
 func ShouldStop(direction elevio.MotorDirection, floor int, confirmedOrders [][]bool) bool {
 	switch direction {
@@ -96,7 +114,7 @@ func ShouldStop(direction elevio.MotorDirection, floor int, confirmedOrders [][]
 }
 
 func ClearAtFloor(currentFloor int, currentDir elevio.MotorDirection, orders [][]bool) fsm.ClearFloorOrders {
-	orderToClear := fsm.ClearFloorOrders{currentFloor, false, false, false}
+	orderToClear := ClearFloorOrders{currentFloor, false, false, false}
 	for btn := range orders[currentFloor] {
 		if (currentDir == elevio.MD_Up) && (elevio.ButtonType(btn) == elevio.BT_HallUp) {
 			orderToClear.HallUp = true
@@ -108,7 +126,6 @@ func ClearAtFloor(currentFloor int, currentDir elevio.MotorDirection, orders [][
 			orderToClear.Cab = true
 			orderToClear.HallDown = true
 			orderToClear.HallUp = true
-
 		}
 		if elevio.ButtonType(btn) == elevio.BT_Cab {
 			orderToClear.Cab = true
