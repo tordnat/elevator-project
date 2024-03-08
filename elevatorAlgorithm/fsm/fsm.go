@@ -113,19 +113,15 @@ func newReqClear(elevState elevator.ElevatorState, orderEvent elevator.Order) Cl
 	}
 	return ClearFloorOrders{elevState.Floor, false, false, false}
 }
-
-func onNewRequest(elevState elevator.ElevatorState, orderEvent elevator.Order) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
+func defaultCheck(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
+	emptyOrder := elevator.Order{-1, elevio.ButtonType(-1)}
 	switch elevState.Behaviour {
 	case elevator.EB_DoorOpen:
-		if requests.ShouldClearImmediately(elevState.Floor, elevState.Direction, orderEvent) {
+		ordersToClear := requests.ClearAtFloor(elevState.Floor, elevState.Direction, elevState.Requests)
+		if ordersToClear == emptyOrder {
 			timer.Start()
-		} else {
-			elevState.Requests[orderEvent.Floor][orderEvent.Button] = true
 		}
-	case elevator.EB_Moving:
-		elevState.Requests[orderEvent.Floor][orderEvent.Button] = true
 	case elevator.EB_Idle:
-		elevState.Requests[orderEvent.Floor][orderEvent.Button] = true
 		pair := requests.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Requests)
 
 		elevState.Direction = pair.Dir

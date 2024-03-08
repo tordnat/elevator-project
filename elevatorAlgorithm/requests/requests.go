@@ -2,6 +2,7 @@ package requests
 
 import (
 	"elevatorAlgorithm/elevator"
+	"elevatorAlgorithm/fsm"
 	"elevatorDriver/elevio"
 )
 
@@ -94,12 +95,26 @@ func ShouldStop(direction elevio.MotorDirection, floor int, confirmedOrders [][]
 	}
 }
 
-func ShouldClearImmediately(currentFloor int, currentDir elevio.MotorDirection, orderEvent elevator.Order) bool {
-	return currentFloor == orderEvent.Floor &&
-		(((currentDir == elevio.MD_Up) && (orderEvent.Button == elevio.BT_HallUp)) ||
-			((currentDir == elevio.MD_Down) && (orderEvent.Button == elevio.BT_HallDown)) ||
-			(currentDir == elevio.MD_Stop) ||
-			(orderEvent.Button == elevio.BT_Cab))
+func ClearAtFloor(currentFloor int, currentDir elevio.MotorDirection, orders [][]bool) fsm.ClearFloorOrders {
+	orderToClear := fsm.ClearFloorOrders{currentFloor, false, false, false}
+	for btn := range orders[currentFloor] {
+		if (currentDir == elevio.MD_Up) && (elevio.ButtonType(btn) == elevio.BT_HallUp) {
+			orderToClear.HallUp = true
+		}
+		if (currentDir == elevio.MD_Down) && (elevio.ButtonType(btn) == elevio.BT_HallDown) {
+			orderToClear.HallDown = true
+		}
+		if currentDir == elevio.MD_Stop {
+			orderToClear.Cab = true
+			orderToClear.HallDown = true
+			orderToClear.HallUp = true
+
+		}
+		if elevio.ButtonType(btn) == elevio.BT_Cab {
+			orderToClear.Cab = true
+		}
+	}
+	return orderToClear
 }
 
 func ShouldClearHallUp(floor int, dir elevio.MotorDirection, requests [][]bool) bool {
