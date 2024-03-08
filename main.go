@@ -44,16 +44,13 @@ func main() {
 	}
 }
 
+// Clear the order and send to network. If it was succesfully cleared we should quickly get back a new output from HRA where the order i cleared. If it's not cleared within door has closed, something went wrong, we should disconnect from network? Restart?
 func removeOrder(orderCompletionRequestTVchannel chan fsm.ClearFloorOrders) {
 	for order := range orderCompletionRequestTVchannel {
 		log.Println("Order my ballz", order)
 	}
 }
 
-// TODO: Make this function generate orderAssignement events based on HRA output. Bascially it only sends an assignment if it's new, like a button press
-// This function is not really a final implementation, but something that is easy to take appart to merge with other parts of the system
-// Also: A better implementation is to not base the FSM on only getting a single new order. Simple fix now is to just send requests successively.
-// Main problem is that we have no way of clearing orders from the FSM without it clearing them itself. This is why we need clearing on a sperate channel
 func test(orderAssignment chan elevator.Order) {
 	time.Sleep(5 * time.Second)
 	log.Println("Sending assignment")
@@ -61,8 +58,13 @@ func test(orderAssignment chan elevator.Order) {
 	log.Println("Sent assignment")
 	time.Sleep(5 * time.Second)
 	orderAssignment <- elevator.Order{Floor: 3, Button: elevio.BT_HallDown}
-
 }
+
+// TODO: Make this function generate orderAssignement events based on HRA output. Bascially it only sends an assignment if it's new, like a button press
+// This function is not really a final implementation, but something that is easy to take appart to merge with other parts of the system
+// Also: A better implementation is to not base the FSM on only getting a single new order. Simple fix now is to just send requests successively.
+// Main problem is that we have no way of clearing orders from the FSM without it clearing them itself. This is why we need clearing on a sperate channel
+// We need to store hra.ElevatorSystem in a plae where this function can access it. Only requestSync will have access to it currently
 func orderEventGenerator(orderAssignment chan elevator.Order, networkReciever chan hra.ElevatorSystem, elevatorID string) {
 	var oldAssignments [][]bool
 	for networkMsg := range networkReciever {
@@ -71,7 +73,7 @@ func orderEventGenerator(orderAssignment chan elevator.Order, networkReciever ch
 			fmt.Println("Error")
 		}
 		i, j := findDifference(newAssignments, oldAssignments)
-		if !(i == -1 || j == -1) {
+		if !(i == -1 || j == -1) { //Change this to a while loop
 			orderAssignment <- elevator.Order{i, elevio.ButtonType(j)} //i and j must be double checked here.
 		}
 	}

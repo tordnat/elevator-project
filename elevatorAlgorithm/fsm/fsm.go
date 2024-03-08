@@ -31,11 +31,14 @@ func FSM(orderAssignment chan elevator.Order, clearOrders chan ClearFloorOrders,
 	log.Println("Initializing")
 	elevState.Floor = elevio.GetFloor()
 	if elevState.Floor == -1 {
-		elevState = OnInitBetweenFloors(elevState)
+		elevio.SetMotorDirection(elevio.MD_Down)
+		elevState.Direction = elevio.MD_Down
+		elevState.Behaviour = elevator.EB_Moving
 	}
 	for {
 		select {
-		case event := <-orderAssignment: //Analogue of button press
+		case event := <-orderAssignment: //Analogue of button press BUT coudl be a bit different.
+			//Need to decide where to change the orders of the FSM (here, directly from HRA, or in onNewRequest?)
 			log.Println("New assignment ", event)
 			clearOrders <- newReqClear(elevState, event)
 			elevState.Behaviour, elevState.Direction = onNewRequest(elevState, event)
