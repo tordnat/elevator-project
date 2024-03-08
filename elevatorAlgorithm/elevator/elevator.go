@@ -26,7 +26,7 @@ const (
 	EB_Moving
 )
 
-type Elevator struct {
+type ElevatorState struct {
 	Behaviour ElevatorBehaviour
 	Floor     int
 	Direction elevio.MotorDirection
@@ -34,14 +34,6 @@ type Elevator struct {
 }
 
 type Order elevio.ButtonEvent
-
-func NewElevator() Elevator {
-	return Elevator{
-		Floor:     -1,
-		Direction: elevio.MD_Stop,
-		Behaviour: EB_Idle,
-	}
-}
 
 func (eb ElevatorBehaviour) String() string {
 	if eb == EB_Idle {

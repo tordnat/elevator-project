@@ -3,8 +3,10 @@ package requests_test
 import (
 	"elevatorAlgorithm/elevator"
 	"elevatorAlgorithm/requests"
+	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
 	"testing"
+	"time"
 )
 
 func TestRequests(t *testing.T) {
@@ -19,10 +21,10 @@ func TestRequests(t *testing.T) {
 			{false, false, false}},
 	}
 
-	testButtonEvent := elevio.ButtonEvent {
-		Floor:     1,
-		Button:	   BT_HallDown,
-	}
+	testButtonEvent := elevator.Order(elevio.ButtonEvent{
+		Floor:  1,
+		Button: elevio.BT_HallDown,
+	})
 	//Here we should clear hall down
 	testShouldClearHallDown := requests.ShouldClearHallDown(testState.Floor, testState.Direction, testState.Requests)
 	if testShouldClearHallDown {
@@ -39,7 +41,7 @@ func TestRequests(t *testing.T) {
 	//Here we should clear hall down
 	testState.Floor = 3
 	testState.Direction = elevio.MD_Up
-	testState.Requests = {{false, false, false},{false, false, false},{false, false, false},{false, true, false}} //Req at floor 2, down(?)
+	testState.Requests = [][]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, true, false}} //Req at floor 2, down(?)
 	if !requests.ShouldClearHallDown(testState.Floor, testState.Direction, testState.Requests) {
 		t.Error("Failed assert, should clear down at floor while moving down")
 	}
@@ -47,11 +49,11 @@ func TestRequests(t *testing.T) {
 	//Here we should not clear hall down
 	testState.Floor = 2
 	testState.Direction = elevio.MD_Up
-	testState.Requests = {{false, false, false},{false, false, false},{false, true, false},{false, false, false}} //Req at floor 2, down(?)
+	testState.Requests = [][]bool{{false, false, false}, {false, false, false}, {false, true, false}, {false, false, false}} //Req at floor 2, down(?)
 	if requests.ShouldClearImmediately(testState.Floor, testState.Direction, testButtonEvent) {
 		t.Error("Failed assert, should not clear down at floor while moving down")
 	}
-	
+
 	//Here we should clear hall down
 	testState.Floor = 1
 	testState.Direction = elevio.MD_Up
@@ -67,14 +69,14 @@ func TestRequests(t *testing.T) {
 		t.Error("Failed assert, should clear down at floor while moving down")
 	}
 
-	testState.Requests = {{false, true, true},{true, false, false},{false, true, false},{false, false, false}} //Req at floor 2, down(?)
+	testState.Requests = [][]bool{{false, true, true}, {true, false, false}, {false, true, false}, {false, false, false}} //Req at floor 2, down(?)
 	testState.Floor = 3
 	testState.Direction = elevio.MD_Up
 	//elevator should clear call in 3rd floor hallDown
 	timer.Initialize()
 	timer.Start()
 
-	if !elevator.ElevatorBehaviour = true{
+	if testState.Behaviour != elevator.EB_DoorOpen {
 		t.Error("Failed assert, elevator door should be open")
 	}
 
@@ -82,16 +84,11 @@ func TestRequests(t *testing.T) {
 	select {
 	case <-timer.TimerChan:
 
-	case <-time.After(5.5 * time.Second):
+	case <-time.After(5500 * time.Millisecond):
 		t.Error("Failed to receive timer within expected time")
-		if !elevator.ElevatorBehaviour = true{
+		if testState.Behaviour != elevator.EB_DoorOpen {
 			t.Error("Failed assert, elevator door should be open")
 		}
 	}
-	
-
-	
-
-
 
 }
