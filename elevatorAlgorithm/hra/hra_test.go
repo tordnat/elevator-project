@@ -8,24 +8,31 @@ import (
 	"testing"
 )
 
+const (
+	unknownOrder     = 0
+	noOrder          = 1
+	unconfirmedOrder = 2
+	confirmedOrder   = 3
+)
+
 // Example usage. Remove when module is incorporated
 func TestHra(t *testing.T) {
 	system := hra.ElevatorSystem{
-		HallRequests: [][]bool{
-			{false, false}, {true, false}, {false, false}, {false, true},
+		HallRequests: [][]int{
+			{noOrder, noOrder}, {confirmedOrder, noOrder}, {noOrder, noOrder}, {noOrder, confirmedOrder},
 		},
 		ElevatorStates: map[string]hra.LocalElevatorState{
 			"0": {
 				Behaviour:   elevator.EB_Moving,
 				Floor:       2,
 				Direction:   elevio.MD_Up,
-				CabRequests: []bool{false, false, true, true},
+				CabRequests: []int{noOrder, noOrder, confirmedOrder, confirmedOrder},
 			},
 			"1": {
 				Behaviour:   elevator.EB_Idle,
 				Floor:       0,
 				Direction:   elevio.MD_Stop,
-				CabRequests: []bool{false, false, false, false},
+				CabRequests: []int{noOrder, noOrder, noOrder, noOrder},
 			},
 		},
 	}

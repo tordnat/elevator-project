@@ -4,8 +4,8 @@ import (
 	"flag"
 	"fmt"
 )
- 
-func InitCommandLineArgs(args []string) (int, int) {
+
+func InitCommandLineArgs(args []string) (int, string) {
 	var port int
 	flag.IntVar(&port, "port", 15657, "Specifies the port to connect to elevator on, default is 15657")
 	var id int
@@ -14,5 +14,5 @@ func InitCommandLineArgs(args []string) (int, int) {
 
 	fmt.Println("Port for connecting to elevator is", port, " ID of elevator is ", id)
 
-	return port, id
+	return port, fmt.Sprint(id)
 }
