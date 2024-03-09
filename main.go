@@ -4,6 +4,7 @@ import (
 	"elevatorAlgorithm/elevator"
 	"elevatorAlgorithm/fsm"
 	"elevatorAlgorithm/hra"
+	"elevatorAlgorithm/requests"
 	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
 	"fmt"
@@ -33,31 +34,45 @@ func main() {
 	go bcast.Transmitter(bcastPort, networkTransmitter)
 
 	//All channels of FSM go here
-	orderAssignment := make(chan elevator.Order)      // This type is perhaps a bit weirdly defined. Events to this channel should be generated from HRA assignments.
-	orderCompleted := make(chan fsm.ClearFloorOrders) //TODO: handle completed order deletion. Maybe a channel is overkill
+	orderAssignment := make(chan [][]bool)                 // This type is perhaps a bit weirdly defined. Events to this channel should be generated from HRA assignments.
+	orderCompleted := make(chan requests.ClearFloorOrders) //TODO: handle completed order deletion. Maybe a channel is overkill
 
 	go fsm.FSM(orderAssignment, orderCompleted, floorEvent, obstructionEvent) //maybe add timer also?
 	//go orderEventGenerator(orderAssignment, networkReciever, elevatorID)
 	go removeOrder(orderCompleted)
-	go test(orderAssignment)
+	go addOrder(orderAssignment)
 	for {
 	}
 }
 
 // Clear the order and send to network. If it was succesfully cleared we should quickly get back a new output from HRA where the order i cleared. If it's not cleared within door has closed, something went wrong, we should disconnect from network? Restart?
-func removeOrder(orderCompletionRequestTVchannel chan fsm.ClearFloorOrders) {
+func removeOrder(orderCompletionRequestTVchannel chan requests.ClearFloorOrders) {
 	for order := range orderCompletionRequestTVchannel {
-		log.Println("Order my ballz", order)
+		log.Println("New order", order)
 	}
 }
 
-func test(orderAssignment chan elevator.Order) {
+func addOrder(orderAssignment chan [][]bool) {
 	time.Sleep(5 * time.Second)
 	log.Println("Sending assignment")
-	orderAssignment <- elevator.Order{Floor: 1, Button: elevio.BT_HallDown}
+	orderAssignment <- [][]bool{
+		{true, false, false},
+		{false, false, false},
+		{false, false, false},
+		{false, false, false}}
 	log.Println("Sent assignment")
-	time.Sleep(5 * time.Second)
-	orderAssignment <- elevator.Order{Floor: 3, Button: elevio.BT_HallDown}
+	time.Sleep(8 * time.Second)
+	orderAssignment <- [][]bool{
+		{false, false, false},
+		{false, false, false},
+		{false, false, false},
+		{true, false, false}}
+	time.Sleep(8 * time.Second)
+	orderAssignment <- [][]bool{
+		{false, false, false},
+		{false, false, false},
+		{false, false, false},
+		{true, false, false}}
 }
 
 // TODO: Make this function generate orderAssignement events based on HRA output. Bascially it only sends an assignment if it's new, like a button press

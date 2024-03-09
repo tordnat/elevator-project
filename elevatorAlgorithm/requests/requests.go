@@ -2,7 +2,6 @@ package requests
 
 import (
 	"elevatorAlgorithm/elevator"
-	"elevatorAlgorithm/fsm"
 	"elevatorDriver/elevio"
 )
 
@@ -85,7 +84,7 @@ func ChooseDirection(direction elevio.MotorDirection, floor int, confirmedOrders
 
 	}
 }
-func HaveOrders(currentFloor int, confirmedOrders [][]bool) {
+func HaveOrders(currentFloor int, confirmedOrders [][]bool) bool {
 	if requestsHere(currentFloor, confirmedOrders) {
 		return true
 	}
@@ -113,7 +112,7 @@ func ShouldStop(direction elevio.MotorDirection, floor int, confirmedOrders [][]
 	}
 }
 
-func ClearAtFloor(currentFloor int, currentDir elevio.MotorDirection, orders [][]bool) fsm.ClearFloorOrders {
+func ClearAtFloor(currentFloor int, currentDir elevio.MotorDirection, orders [][]bool) ClearFloorOrders {
 	orderToClear := ClearFloorOrders{currentFloor, false, false, false}
 	for btn := range orders[currentFloor] {
 		if (currentDir == elevio.MD_Up) && (elevio.ButtonType(btn) == elevio.BT_HallUp) {

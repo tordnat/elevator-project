@@ -14,7 +14,7 @@ import (
 // State transition functions may be the only exception, they return the new state. We could change the functions to be pure and return a list of HW actions, but a bit bloated?
 // There is no need to use terminology like confirmed orders here. Alle orders are bools in the fsm, therefore they are simply orders.
 
-func FSM(orderAssignment chan elevator.Order, clearOrders chan requests.ClearFloorOrders, floorEvent chan int, obstructionEvent chan bool) {
+func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrders, floorEvent chan int, obstructionEvent chan bool) {
 	elevState := elevator.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop, [][]bool{
 		{false, false, false},
 		{false, false, false},
@@ -30,11 +30,11 @@ func FSM(orderAssignment chan elevator.Order, clearOrders chan requests.ClearFlo
 	}
 	for {
 		select {
-		case event := <-orderAssignment: //Analogue of button press BUT coudl be a bit different.
-			//Need to decide where to change the orders of the FSM (here, directly from HRA, or in onNewRequest?)
-			log.Println("New assignment ", event)
-			clearOrders <- newReqClear(elevState, event)
-			//elevState.Behaviour, elevState.Direction = onNewRequest(elevState, event)
+		case orders := <-orderAssignment:
+			log.Println("New assignment ", orders)
+			elevState.Requests = orders
+			elevState.Behaviour, elevState.Direction = onNewAssignmentRequest(elevState)
+			clearOrders <- newOrderAssignmentClear(elevState) // This must be run last to not clear orders at the wrong place
 
 		case event := <-floorEvent:
 			log.Println("At floor", event)
@@ -80,14 +80,14 @@ func OnInitBetweenFloors(e elevator.ElevatorState) elevator.ElevatorState {
 	return e
 }
 
-func newReqClear(elevState elevator.ElevatorState, orderEvent elevator.Order) requests.ClearFloorOrders {
-	emptyOrder := elevator.Order{-1, elevio.ButtonType(-1)}
+func newOrderAssignmentClear(elevState elevator.ElevatorState) requests.ClearFloorOrders {
+	emptyClear := requests.ClearFloorOrders{elevState.Floor, false, false, false}
 	var clearOrder requests.ClearFloorOrders
 	switch elevState.Behaviour {
 	case elevator.EB_DoorOpen:
 		orderToClearImmediately := requests.ClearAtFloor(elevState.Floor, elevState.Direction, elevState.Requests)
-		if orderToClear != emptyOrder {
-			return orderToClear
+		if orderToClearImmediately != emptyClear {
+			return orderToClearImmediately
 		}
 	case elevator.EB_Idle:
 		pair := requests.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Requests)
@@ -104,18 +104,16 @@ func newReqClear(elevState elevator.ElevatorState, orderEvent elevator.Order) re
 			return clearOrder
 		}
 	}
-	return requests.ClearFloorOrders{elevState.Floor, false, false, false}
+	return emptyClear
 }
 
-
-
-func defaultCheck(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
-	if reuqests.HaveOrders() {
-		emptyOrder := elevator.Order{-1, elevio.ButtonType(-1)}
+func onNewAssignmentRequest(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
+	if requests.HaveOrders(elevState.Floor, elevState.Requests) { //Consider movign if statement out of function
 		switch elevState.Behaviour {
 		case elevator.EB_DoorOpen:
+			emptyClear := requests.ClearFloorOrders{elevState.Floor, false, false, false}
 			ordersToClear := requests.ClearAtFloor(elevState.Floor, elevState.Direction, elevState.Requests)
-			if ordersToClear != emptyOrder {
+			if ordersToClear != emptyClear {
 				timer.Start()
 			}
 		case elevator.EB_Idle:
