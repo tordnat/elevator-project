@@ -14,7 +14,7 @@ import (
 // State transition functions may be the only exception, they return the new state. We could change the functions to be pure and return a list of HW actions, but a bit bloated?
 // There is no need to use terminology like confirmed orders here. Alle orders are bools in the fsm, therefore they are simply orders.
 
-func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrders, floorEvent chan int, obstructionEvent chan bool) {
+func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrders, floorEvent chan int, obstructionEvent chan bool, elevStateToSync chan elevator.ElevatorState) {
 	elevState := elevator.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop, [][]bool{
 		{false, false, false},
 		{false, false, false},
@@ -30,19 +30,17 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 	}
 	for {
 		select {
-		case orders := <-orderAssignment:
-			log.Println("New assignment ", orders)
-			elevState.Requests = orders
+		case orderAssignments := <-orderAssignment:
+			log.Println("New assignments ", orderAssignments)
+			elevState.Requests = orderAssignments
 			elevState.Behaviour, elevState.Direction = onNewAssignmentRequest(elevState)
 			clearOrders <- newOrderAssignmentClear(elevState) // This must be run last to not clear orders at the wrong place
 
-		case event := <-floorEvent:
-			log.Println("At floor", event)
-			elevState.Floor = event
+		case floor := <-floorEvent:
+			elevState.Floor = floor
 			var clearOrder requests.ClearFloorOrders
 			elevState.Behaviour, clearOrder = OnFloorArrival(elevState)
 			clearOrders <- clearOrder
-			log.Println("Got past clearOrders in floor")
 
 		case <-timer.TimerChan:
 			log.Println("Door timeout")
@@ -62,6 +60,7 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 				timer.Start()
 			}
 		}
+		elevStateToSync <- elevState //Must find out if this is a good place to sync elevState
 	}
 }
 
@@ -139,7 +138,6 @@ func onNewAssignmentRequest(elevState elevator.ElevatorState) (elevator.Elevator
 
 func OnFloorArrival(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour, requests.ClearFloorOrders) {
 	var clearOrder requests.ClearFloorOrders
-	log.Println("On floor arrival")
 	switch elevState.Behaviour {
 	case elevator.EB_Moving:
 		if requests.ShouldStop(elevState.Direction, elevState.Floor, elevState.Requests) {

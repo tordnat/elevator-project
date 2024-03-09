@@ -1,6 +1,8 @@
 package main
 
 import (
+	"elevator-project/cmd"
+	"elevator-project/requestSync"
 	"elevatorAlgorithm/elevator"
 	"elevatorAlgorithm/fsm"
 	"elevatorAlgorithm/hra"
@@ -10,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"networkDriver/bcast"
+	"os"
 	"time"
 )
 
@@ -18,7 +21,8 @@ const bcastPort int = 25565
 func main() {
 	// elevatorID := "0"
 	log.Println("Elevator starting 🛗")
-	elevio.Init("localhost:15657", elevator.N_FLOORS)
+	elevatorPort, elevatorId := cmd.InitCommandLineArgs(os.Args)
+	elevio.Init(fmt.Sprintf("localhost:%d", elevatorPort), elevator.N_FLOORS)
 
 	timer.Initialize()
 	buttonEvent := make(chan elevio.ButtonEvent)
@@ -36,11 +40,10 @@ func main() {
 	//All channels of FSM go here
 	orderAssignment := make(chan [][]bool)                 // This type is perhaps a bit weirdly defined. Events to this channel should be generated from HRA assignments.
 	orderCompleted := make(chan requests.ClearFloorOrders) //TODO: handle completed order deletion. Maybe a channel is overkill
+	elevStateFromFSM := make(chan elevator.ElevatorState)
 
-	go fsm.FSM(orderAssignment, orderCompleted, floorEvent, obstructionEvent) //maybe add timer also?
-	//go orderEventGenerator(orderAssignment, networkReciever, elevatorID)
-	go removeOrder(orderCompleted)
-	go addOrder(orderAssignment)
+	go fsm.FSM(orderAssignment, orderCompleted, floorEvent, obstructionEvent, elevStateFromFSM) //maybe add timer also?
+	go requestSync.Sync(elevStateFromFSM, elevatorId, orderAssignment, orderCompleted)
 	for {
 	}
 }

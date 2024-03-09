@@ -3,6 +3,7 @@ package requestSync
 import (
 	"elevatorAlgorithm/elevator"
 	"elevatorAlgorithm/hra"
+	"elevatorAlgorithm/requests"
 	"elevatorDriver/elevio"
 	"fmt"
 	"log"
@@ -31,7 +32,7 @@ const peersPort int = 25566
 
 var elevatorSystems map[string]hra.ElevatorSystem = make(map[string]hra.ElevatorSystem) //Could have been closure, but easier as global. Maybe we can't make it a closure if peer list should modify it
 
-func Sync(elevatorSystemFromFSM chan elevator.Elevator, elevatorId string) {
+func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, orderAssignment chan [][]bool, orderCompleted chan requests.ClearFloorOrders) {
 	btnEvent := make(chan elevio.ButtonEvent)
 	networkReciever := make(chan StateMsg)
 	networkTransmitter := make(chan StateMsg)
@@ -67,12 +68,19 @@ func Sync(elevatorSystemFromFSM chan elevator.Elevator, elevatorId string) {
 			msgCounter = networkMsg.Counter
 
 			elevatorSystem = Transition(elevatorId, elevatorSystem, networkMsg)
+			// TODO add HRA assignment of order here
+			// orderAssignment <- orderWhichAreConfirmedAndFromHRA
 
 		case peersUpdate := <-peersReciever:
 			latestPeerList = peersUpdate.Peers //Here we should also update the elevatorSystem map. Important to take the (hall)orders of lost peers before removing it
 			_ = latestPeerList
 		case elevator := <-elevatorSystemFromFSM:
 			_ = elevator
+
+		case orderToClear := <-orderCompleted:
+			//Transmit to network that we want to clear
+			//Bascially run a transition on our elevator system after having assigned the order as completed
+			_ = orderToClear
 		case <-timer.C: //Timer reset, send new state update
 			msgCounter += 1
 			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystem.HallRequests, elevatorSystem.ElevatorStates[elevatorId]}
