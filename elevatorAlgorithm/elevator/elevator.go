@@ -11,15 +11,6 @@ const DOOR_OPEN_DURATION_S = 2
 
 type ElevatorBehaviour int
 
-// This should be global or imported
-const (
-	unknownOrder = iota
-	noOrder
-	unconfirmedOrder
-	confirmedOrder
-	servicedOrder
-)
-
 const (
 	EB_Idle ElevatorBehaviour = iota
 	EB_DoorOpen
@@ -71,19 +62,3 @@ func PrintElevatorSystem(elevatorSystem hra.ElevatorSystem) {
 }
 */
 // String method to print the RequestStatus as a string
-func ReqToString(req int) string {
-	switch req {
-	case unknownOrder:
-		return "unknown"
-	case noOrder:
-		return "no request"
-	case unconfirmedOrder:
-		return "unconfirmed"
-	case confirmedOrder:
-		return "confirmed"
-	case servicedOrder:
-		return "serviced order"
-	default:
-		return "Invalid"
-	}
-}

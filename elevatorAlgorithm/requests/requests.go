@@ -16,7 +16,7 @@ type ClearFloorOrders struct {
 	Cab      bool
 }
 
-func requestsAbove(currentFloor int, confirmedOrders [][]bool) bool {
+func RequestsAbove(currentFloor int, confirmedOrders [][]bool) bool {
 	for f := currentFloor + 1; f < elevator.N_FLOORS; f++ {
 		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
 			if confirmedOrders[f][btn] {
@@ -27,7 +27,7 @@ func requestsAbove(currentFloor int, confirmedOrders [][]bool) bool {
 	return false
 }
 
-func requestsBelow(currentFloor int, confirmedOrders [][]bool) bool {
+func RequestsBelow(currentFloor int, confirmedOrders [][]bool) bool {
 	for f := 0; f < currentFloor; f++ {
 		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
 			if confirmedOrders[f][btn] {
@@ -38,7 +38,7 @@ func requestsBelow(currentFloor int, confirmedOrders [][]bool) bool {
 	return false
 }
 
-func requestsHere(currentFloor int, confirmedOrders [][]bool) bool {
+func RequestsHere(currentFloor int, confirmedOrders [][]bool) bool {
 	for btn := 0; btn < elevator.N_BUTTONS; btn++ {
 		if confirmedOrders[currentFloor][elevio.BT_Cab] {
 			return true
@@ -50,31 +50,31 @@ func requestsHere(currentFloor int, confirmedOrders [][]bool) bool {
 func ChooseDirection(direction elevio.MotorDirection, floor int, confirmedOrders [][]bool) DirnBehaviourPair {
 	switch direction {
 	case elevio.MD_Up:
-		if requestsAbove(floor, confirmedOrders) {
+		if RequestsAbove(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Up, elevator.EB_Moving}
-		} else if requestsHere(floor, confirmedOrders) {
+		} else if RequestsHere(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Down, elevator.EB_DoorOpen}
-		} else if requestsBelow(floor, confirmedOrders) {
+		} else if RequestsBelow(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Down, elevator.EB_Moving}
 		} else {
 			return DirnBehaviourPair{elevio.MD_Stop, elevator.EB_Idle}
 		}
 	case elevio.MD_Down:
-		if requestsBelow(floor, confirmedOrders) {
+		if RequestsBelow(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Down, elevator.EB_Moving}
-		} else if requestsHere(floor, confirmedOrders) {
+		} else if RequestsHere(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Up, elevator.EB_DoorOpen}
-		} else if requestsAbove(floor, confirmedOrders) {
+		} else if RequestsAbove(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Up, elevator.EB_Moving}
 		} else {
 			return DirnBehaviourPair{elevio.MD_Stop, elevator.EB_Idle}
 		}
 	case elevio.MD_Stop:
-		if requestsHere(floor, confirmedOrders) {
+		if RequestsHere(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Stop, elevator.EB_DoorOpen}
-		} else if requestsAbove(floor, confirmedOrders) {
+		} else if RequestsAbove(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Up, elevator.EB_Moving}
-		} else if requestsBelow(floor, confirmedOrders) {
+		} else if RequestsBelow(floor, confirmedOrders) {
 			return DirnBehaviourPair{elevio.MD_Down, elevator.EB_Moving}
 		} else {
 			return DirnBehaviourPair{elevio.MD_Stop, elevator.EB_Idle}
@@ -85,13 +85,13 @@ func ChooseDirection(direction elevio.MotorDirection, floor int, confirmedOrders
 	}
 }
 func HaveOrders(currentFloor int, confirmedOrders [][]bool) bool {
-	if requestsHere(currentFloor, confirmedOrders) {
+	if RequestsHere(currentFloor, confirmedOrders) {
 		return true
 	}
-	if requestsAbove(currentFloor, confirmedOrders) {
+	if RequestsAbove(currentFloor, confirmedOrders) {
 		return true
 	}
-	if requestsBelow(currentFloor, confirmedOrders) {
+	if RequestsBelow(currentFloor, confirmedOrders) {
 		return true
 	}
 	return false
@@ -102,11 +102,11 @@ func ShouldStop(direction elevio.MotorDirection, floor int, confirmedOrders [][]
 	case elevio.MD_Down:
 		return confirmedOrders[floor][elevio.BT_HallDown] ||
 			confirmedOrders[floor][elevio.BT_Cab] ||
-			!requestsBelow(floor, confirmedOrders)
+			!RequestsBelow(floor, confirmedOrders)
 	case elevio.MD_Up:
 		return confirmedOrders[floor][elevio.BT_HallUp] ||
 			confirmedOrders[floor][elevio.BT_Cab] ||
-			!requestsAbove(floor, confirmedOrders)
+			!RequestsAbove(floor, confirmedOrders)
 	default:
 		return true
 	}
@@ -135,7 +135,7 @@ func ClearAtFloor(currentFloor int, currentDir elevio.MotorDirection, orders [][
 
 func ShouldClearHallUp(floor int, dir elevio.MotorDirection, requests [][]bool) bool {
 	if dir == elevio.MD_Down {
-		if requestsBelow(floor, requests) || requests[floor][elevio.BT_HallDown] {
+		if RequestsBelow(floor, requests) || requests[floor][elevio.BT_HallDown] {
 			return false
 		}
 	}
@@ -144,7 +144,7 @@ func ShouldClearHallUp(floor int, dir elevio.MotorDirection, requests [][]bool) 
 
 func ShouldClearHallDown(floor int, dir elevio.MotorDirection, requests [][]bool) bool {
 	if dir == elevio.MD_Up {
-		if requestsAbove(floor, requests) || requests[floor][elevio.BT_HallUp] {
+		if RequestsAbove(floor, requests) || requests[floor][elevio.BT_HallUp] {
 			return false
 		}
 	}

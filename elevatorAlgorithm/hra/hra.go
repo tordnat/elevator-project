@@ -25,10 +25,8 @@ type LocalElevatorState struct {
 	CabRequests []int
 }
 
-type HallRequestsType [][]int
-
 type ElevatorSystem struct {
-	HallRequests   HallRequestsType
+	HallRequests   [][]int
 	ElevatorStates map[string]LocalElevatorState
 }
 
@@ -109,7 +107,7 @@ func Decode(hraString string) OrderAssignments {
 	return result
 }
 
-func hraHallRequestTypeToBool(requests HallRequestsType) [][]bool {
+func hraHallRequestTypeToBool(requests [][]int) [][]bool {
 	retArr := make([][]bool, len(requests))
 	for i, row := range requests {
 		retArr[i] = make([]bool, len(row))

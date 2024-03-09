@@ -11,7 +11,6 @@ import (
 	"elevatorDriver/elevio"
 	"fmt"
 	"log"
-	"networkDriver/bcast"
 	"os"
 	"time"
 )
@@ -28,14 +27,10 @@ func main() {
 	buttonEvent := make(chan elevio.ButtonEvent)
 	floorEvent := make(chan int)
 	obstructionEvent := make(chan bool)
-	networkReciever := make(chan hra.ElevatorSystem)
-	networkTransmitter := make(chan hra.ElevatorSystem)
 	elevio.SetDoorOpenLamp(false)
 	go elevio.PollButtons(buttonEvent)
 	go elevio.PollFloorSensor(floorEvent)
 	go elevio.PollObstructionSwitch(obstructionEvent)
-	go bcast.Receiver(bcastPort, networkReciever)
-	go bcast.Transmitter(bcastPort, networkTransmitter)
 
 	//All channels of FSM go here
 	orderAssignment := make(chan [][]bool)                 // This type is perhaps a bit weirdly defined. Events to this channel should be generated from HRA assignments.
