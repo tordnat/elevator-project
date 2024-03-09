@@ -80,4 +80,107 @@ func TestRequests(t *testing.T) {
 		t.Error("Failed assert, elevator door should be open")
 	}
 
+
+	//Unit tests for requests above
+	testState.Floor = 3
+	testState.Requests = {{false, false, false}, {false, false, false}, {false, false, false}, {false, true, false}}
+	if !requests.requestsAbove(){
+		t.Error("Failes assert, request above")
+	}
+
+	testState.Floor = 1
+	testState.Requests = {{false, false, false}, {false, false, true}, {false, false, false}, {false, false, false}}
+	if !requests.requestsAbove(){
+		t.Error("Failes assert, request above")
+	}
+
+	testState.Floor = 2
+	testState.Requests = {{true, false, true}, {false, false, true}, {true, true, true}, {false, true, true}}
+	if !requests.requestsAbove(){
+		t.Error("Failes assert, request above")
+	}
+
+	testState.Floor = 4
+	testState.Requests = {{true, false, true}, {true, true, true}, {true, false, true}, {false, true, true}}
+	if requests.requestsAbove(){
+		t.Error("Failes assert, no request above")
+	}
+
+	testState.Floor = 1
+	testState.Requests = {{false, false, false}, {false, false, false}, {false, false, false}, {false, false, false}}
+	if requests.requestsAbove(){
+		t.Error("Failes assert, no request above")
+	}
+
+	
+	//Unit tests for requests below
+	testState.Floor = 4
+	testState.Requests = {{false, false, false}, {false, false, false}, {false, false, false}, {false, true, false}}
+	if !requests.requestsAbove(){
+		t.Error("Failes assert, no request below")
+	}
+
+	testState.Floor = 2
+	testState.Requests = {{false, false, false}, {false, false, true}, {false, false, false}, {false, false, false}}
+	if !requests.requestsAbove(){
+		t.Error("Failes assert, no request below")
+	}
+
+	testState.Floor = 2
+	testState.Requests = {{true, false, true}, {false, false, true}, {true, true, true}, {false, true, true}}
+	if requests.requestsAbove(){
+		t.Error("Failes assert, request below")
+	}
+
+	testState.Floor = 1
+	testState.Requests = {{true, false, true}, {true, true, true}, {true, false, true}, {false, true, true}}
+	if !requests.requestsAbove(){
+		t.Error("Failes assert, no request below")
+	}
+
+	testState.Floor = 3
+	testState.Requests = {{false, false, false}, {false, false, false}, {false, false, false}, {false, false, false}}
+	if !requests.requestsAbove(){
+		t.Error("Failes assert, no request below")
+	}
+
+
+	//Unit tests for requestsHere
+	testState.Floor = 1
+	testState.Requests = {{false, false, true}, {false, false false}, {false, false, false}, {false, false, false}}
+	if !requests.requestsAbove(){
+		t.Error("Failes assert, request here")
+	}
+
+	testState.Floor = 2
+	testState.Requests = {{true, false, true}, {false, false, false}, {true, true, true}, {false, true, true}}
+	if !requests.requestsAbove(){
+		t.Error("Failes assert, no request here")
+	}
+
+	testState.Floor = 4
+	testState.Requests = {{false, false false}, {false, false false}, {false, false false}, {false, true, false}}
+	if !requests.requestsAbove(){
+		t.Error("Failes assert, request here")
+	}
+
+	testState.Floor = 3
+	testState.Requests = {{false, false, false}, {false, false, false}, {true, true, true}, {false, false, false}}
+	if !requests.requestsAbove(){
+		t.Error("Failes assert, no request here")
+	}
+
+
+	//Unit tests for choose direction
+
+	testState.Floor = 1
+	testState.Requests = {{false, false, false}, {false, false, false}, {false, false, false}, {false, true, false}}
+	if requests.ChooseDirection(elevio.MD_Up, testState.Floor, testState.Requests) == requests.DirnBehaviourPair{elevio.MD_Up, elevator.EB_Moving} {
+		t.Error("Failes assert, direction should be up")
+	}
+
+	if requests.ChooseDirection(elevio.MD_Up, 3, {{false, false, false}, {false, false, false}, {false, false, false}, {false, true, false}}) == requests.DirnBehaviourPair{elevio.MD_Up, elevator.EB_Moving} {
+		t.Error("Failes assert, direction should be up")
+	}
+
 }

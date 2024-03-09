@@ -12,14 +12,20 @@ import (
 	"time"
 )
 
-type StateMsg struct {
-	Id           string
-	Counter      uint64 //Non-monotonic counter to only recieve newest data
-	HallRequests hra.HallRequestsType
-	Elevator     hra.LocalElevatorState
+type elevatorState struct {
+	Behaviour elevator.ElevatorBehaviour
+	Floor     int
+	Direction elevio.MotorDirection
 }
 
-// Must be imported
+type StateMsg struct {
+	Id            string
+	Counter       uint64 //Non-monotonic counter to only recieve newest data
+	ElevatorState elevatorState
+	OrderSystem   SyncOrderSystem
+}
+
+// Must be imported?
 const (
 	unknownOrder = iota
 	noOrder
@@ -31,6 +37,19 @@ const bcastPort int = 25565
 const peersPort int = 25566
 
 var elevatorSystems map[string]hra.ElevatorSystem = make(map[string]hra.ElevatorSystem) //Could have been closure, but easier as global. Maybe we can't make it a closure if peer list should modify it
+
+type SyncOrder struct {
+	OrderState map[string]int //Map of what each elevator thinks the state of this order is (Could we reduce amount of state even more? In concensusTransition we only care about if a state is equal to our own)
+}
+
+type SyncOrderSystem struct {
+	HallRequests [][]SyncOrder
+	CabRequests  map[string][]SyncOrder
+}
+type OrderSystem struct {
+	HallRequests [][]int
+	CabRequests  map[string][]int
+}
 
 func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, orderAssignment chan [][]bool, orderCompleted chan requests.ClearFloorOrders) {
 	btnEvent := make(chan elevio.ButtonEvent)
@@ -100,7 +119,6 @@ func goToFloor0() {
 
 // Improvements to transition: We modify both localElevSystem and elevatorSystems if a new node joins, this should only need to be done once, e.g using a function.
 func Transition(ourId string, localElevSystem hra.ElevatorSystem, networkMsg StateMsg) hra.ElevatorSystem { //This function should maybe maybe be moved to main, or parts of it moved
-
 	var localCabRequests []int
 	if localElevState, ok := localElevSystem.ElevatorStates[networkMsg.Id]; !ok {
 		localCabRequests = localElevState.CabRequests
@@ -122,16 +140,82 @@ func Transition(ourId string, localElevSystem hra.ElevatorSystem, networkMsg Sta
 	localElevSystem.HallRequests = transitionHallRequests(localElevSystem.HallRequests, networkMsg.HallRequests)
 
 	elevatorSystems[ourId] = localElevSystem
-	localElevSystem = consensusTransition(ourId, elevatorSystems)
-	return localElevSystem
+	return ConsensusTransition(ourId, orderSystem)
+}
+func allValuesEqual(m map[string]int) bool {
+	var firstValue int
+	isFirst := true
+
+	for _, value := range m {
+		if isFirst {
+			firstValue = value
+			isFirst = false
+		} else {
+			if value != firstValue {
+				return false
+			}
+		}
+	}
+	return true
 }
 
-// Should we check ALL requests for concesus, or just were we have "responsibility" for. E.g only our own cab requests or everyone elses aswell? I think both should work conceptually, but one of the solution might be better?
+// Cab and hall are very similar, we should refactor more
+func ConsensusTransitionSingleCab(ourId string, cabRequests map[string][]SyncOrder) (int, int) {
+	for reqFloor, req := range cabRequests[ourId] { //We only check our own cabs for consensus
+		if allValuesEqual(req.OrderState) { //Consensus
+			ourRequest := req.OrderState[ourId]
+			if ourRequest == servicedOrder {
+				return reqFloor, noOrder
+			} else if ourRequest == unknownOrder {
+				return reqFloor, confirmedOrder
+			}
+		}
+	}
+	return -1, -1
+}
+func ConsensusTransitionSingleHall(ourId string, hallRequests [][]SyncOrder) (int, int, int) { // (int, int ,int) is not clear, should have order type instead
+	for reqFloor, row := range hallRequests {
+		for reqBtn, req := range row {
+			if allValuesEqual(req.OrderState) {
+				ourRequest := req.OrderState[ourId]
+				if ourRequest == servicedOrder {
+					return reqFloor, reqBtn, noOrder
+				} else if ourRequest == unknownOrder {
+					return reqFloor, reqBtn, confirmedOrder
+				}
+			}
+		}
+	}
+	return -1, -1, -1
+}
+func ConsensusTransition(ourId string, OrderSystem SyncOrderSystem) SyncOrderSystem {
+
+	//Transition all cabs
+	{
+		floor, newState := ConsensusTransitionSingleCab(ourId, OrderSystem.CabRequests)
+		for floor != -1 && newState != -1 { //Can this create nasty edge cases? Maybe have a validation test earlier to check for unknown orders
+			OrderSystem.CabRequests[ourId][floor].OrderState[ourId] = newState
+			floor, newState = ConsensusTransitionSingleCab(ourId, OrderSystem.CabRequests)
+		}
+	}
+
+	//Transition all halls
+	{
+
+		floor, btn, newState := ConsensusTransitionSingleHall(ourId, OrderSystem.HallRequests)
+		for floor != -1 && btn != -1 {
+			OrderSystem.HallRequests[floor][btn].OrderState[ourId] = newState
+			floor, btn, newState = ConsensusTransitionSingleHall(ourId, OrderSystem.HallRequests)
+		}
+	}
+
+	return OrderSystem
+}
+
+// Should we check ALL requests for concesus, or just were we have "responsibility" for. E.g only our own cab requests or everyone elses aswell? I think both should work conceptually, but only checking our own is easier
 // Hall requests must be checked anyways always
-// There should also be an easier way to find consensus than this. We are storing too much state and could maybe do/store this somewhere else?
-// DO we need to add an extra number/state to the counter?? WHat happens if one elevator is stuck at unknown order, we have to sync somewhere else aswell. Can we sync on noOrder?
-func consensusTransition(ourId string, elevatorSystems map[string]hra.ElevatorSystem) hra.ElevatorSystem {
-	//Loop through all cab requests in our elevator, then compare all cab requests of all other elevators
+// WHat happens if one elevator is stuck at unknown order, we have to sync somewhere else aswell. Can we sync on noOrder?
+func ConsensusTransitio(ourId string, elevatorSystems map[string]hra.ElevatorSystem) (int, int) { //Maybe return early if consensus is reached to limit state chaning inside function
 cabNoconsensus: //Double check this placement
 	for i, ourRequest := range elevatorSystems[ourId].ElevatorStates[ourId].CabRequests { //Double check what to do with unknown order here. If any order was unknown it shuld have pulled from network by now.
 		if ourRequest != unknownOrder && ourRequest != servicedOrder {
@@ -190,7 +274,7 @@ func transitionHallRequests(internalRequests hra.HallRequestsType, networkReques
 	for i, row := range internalRequests {
 		newRequests[i] = make([]int, len(row))
 		for j, req := range row {
-			newRequests[i][j] = transitionOrder(req, networkRequests[i][j]) //PROBLEM: We currently store requests as bools, but they must be ints. Maybe have them as ints until they go into HRA where confirmed orders are true, and everything else is false
+			newRequests[i][j] = transitionOrder(req, networkRequests[i][j])
 		}
 	}
 	return newRequests
