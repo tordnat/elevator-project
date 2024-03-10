@@ -6,6 +6,7 @@ import (
 	"elevatorAlgorithm/requests"
 	"elevatorDriver/elevio"
 	"fmt"
+	"log"
 	"networkDriver/bcast"
 	"networkDriver/peers"
 	"time"
@@ -35,9 +36,7 @@ const (
 const bcastPort int = 25565
 const peersPort int = 25566
 
-type SyncOrder struct { // Bad name, order status is better
-	OrderState map[string]int //Map of what each elevator thinks the state of this order is (Could we reduce amount of state even more? In concensusTransition we only care about if a state is equal to our own)
-}
+type SyncOrder map[string]int //Map of what each elevator thinks the state of this order is (Could we reduce amount of state even more?
 
 type SyncOrderSystem struct {
 	HallRequests [][]SyncOrder
@@ -76,7 +75,7 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 			msgCounter += 1 //To prevent forgetting counter, this should perhaps be in a seperate function
 			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystem, SyncSystemToOrderSystem(elevatorId, syncOrderSystem)}
 
-		case networkMsg := <-networkReciever: //Got message
+		case networkMsg := <-networkReciever: //TODO: Add elevatorSystem
 			if networkMsg.Counter <= msgCounter && networkMsg.Id != elevatorId {
 				msgCounter += 1
 				break
@@ -100,13 +99,13 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 			//Transmit to network that we want to clear
 			//Bascially run a transition on our elevator system after having assigned the order as completed
 			if orderToClear.Cab {
-				syncOrderSystem.CabRequests[elevatorId][orderToClear.Floor].OrderState[elevatorId] = noOrder
+				syncOrderSystem.CabRequests[elevatorId][orderToClear.Floor][elevatorId] = noOrder
 			}
 			if orderToClear.HallUp {
-				syncOrderSystem.HallRequests[orderToClear.Floor][0].OrderState[elevatorId] = noOrder
+				syncOrderSystem.HallRequests[orderToClear.Floor][0][elevatorId] = noOrder
 			}
 			if orderToClear.HallDown {
-				syncOrderSystem.HallRequests[orderToClear.Floor][1].OrderState[elevatorId] = noOrder
+				syncOrderSystem.HallRequests[orderToClear.Floor][1][elevatorId] = noOrder
 			}
 
 		case <-timer.C: //Timer reset, send new state update
@@ -119,17 +118,24 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 
 func AddOrder(ourId string, syncOrderSystem SyncOrderSystem, btn elevio.ButtonEvent) SyncOrderSystem {
 	if btn.Button == elevio.BT_Cab {
-		syncOrderSystem.CabRequests[ourId][btn.Floor].OrderState[ourId] = TransitionOrder(syncOrderSystem.CabRequests[ourId][btn.Floor].OrderState[ourId], unconfirmedOrder)
+		syncOrderSystem.CabRequests[ourId][btn.Floor][ourId] = TransitionOrder(syncOrderSystem.CabRequests[ourId][btn.Floor][ourId], unconfirmedOrder)
 	} else {
-		syncOrderSystem.HallRequests[btn.Floor][btn.Button].OrderState[ourId] = TransitionOrder(syncOrderSystem.HallRequests[btn.Floor][btn.Button].OrderState[ourId], unconfirmedOrder)
+		syncOrderSystem.HallRequests[btn.Floor][btn.Button][ourId] = TransitionOrder(syncOrderSystem.HallRequests[btn.Floor][btn.Button][ourId], unconfirmedOrder)
 	}
 	return syncOrderSystem
 }
 
 func Transition(ourId string, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
+	//syncOrderSystem = addElevatorToSyncOrderSystem(ourId, networkMsg, syncOrderSystem)
 	orderSystem := SyncSystemToOrderSystem(ourId, syncOrderSystem)
 	orderSystem.HallRequests = TransitionHallRequests(orderSystem.HallRequests, networkMsg.OrderSystem.HallRequests)
-	orderSystem.CabRequests[ourId] = TransitionCabRequests(orderSystem.CabRequests[ourId], networkMsg.OrderSystem.CabRequests[ourId])
+
+	_, ok := networkMsg.OrderSystem.CabRequests[ourId]
+	if ok {
+		orderSystem.CabRequests[ourId] = TransitionCabRequests(orderSystem.CabRequests[ourId], networkMsg.OrderSystem.CabRequests[ourId])
+	} else {
+		log.Println("Could not transition cabs. Elevator", networkMsg.Id, "does not have our (", ourId, ") requests. Have they received our state?")
+	}
 	syncOrderSystem = systemToSyncOrderSystem(ourId, syncOrderSystem, orderSystem)
 
 	return ConsensusBarrierTransition(ourId, syncOrderSystem)
@@ -157,7 +163,7 @@ func ConsensusBarrierTransition(ourId string, OrderSystem SyncOrderSystem) SyncO
 	{
 		floor, newState := ConsensusTransitionSingleCab(ourId, OrderSystem.CabRequests)
 		for floor != -1 && newState != -1 { //Can this create nasty edge cases? Maybe have a validation test earlier to check for unknown orders
-			OrderSystem.CabRequests[ourId][floor].OrderState[ourId] = newState
+			OrderSystem.CabRequests[ourId][floor][ourId] = newState
 			floor, newState = ConsensusTransitionSingleCab(ourId, OrderSystem.CabRequests)
 		}
 	}
@@ -166,7 +172,7 @@ func ConsensusBarrierTransition(ourId string, OrderSystem SyncOrderSystem) SyncO
 	{
 		floor, btn, newState := ConsensusTransitionSingleHall(ourId, OrderSystem.HallRequests)
 		for floor != -1 && btn != -1 {
-			OrderSystem.HallRequests[floor][btn].OrderState[ourId] = newState
+			OrderSystem.HallRequests[floor][btn][ourId] = newState
 			floor, btn, newState = ConsensusTransitionSingleHall(ourId, OrderSystem.HallRequests)
 		}
 	}
@@ -176,8 +182,8 @@ func ConsensusBarrierTransition(ourId string, OrderSystem SyncOrderSystem) SyncO
 // Cab and hall are very similar, we should refactor more
 func ConsensusTransitionSingleCab(ourId string, cabRequests map[string][]SyncOrder) (int, int) {
 	for reqFloor, req := range cabRequests[ourId] { //We only check our own cabs for consensus
-		if AllValuesEqual(req.OrderState) { //Consensus
-			ourRequest := req.OrderState[ourId]
+		if AllValuesEqual(req) { //Consensus
+			ourRequest := req[ourId]
 			if ourRequest == servicedOrder {
 				return reqFloor, noOrder
 			} else if ourRequest == unconfirmedOrder {
@@ -191,8 +197,8 @@ func ConsensusTransitionSingleCab(ourId string, cabRequests map[string][]SyncOrd
 func ConsensusTransitionSingleHall(ourId string, hallRequests [][]SyncOrder) (int, int, int) { // (int, int ,int) is not clear, should have order type instead
 	for reqFloor, row := range hallRequests {
 		for reqBtn, req := range row {
-			if AllValuesEqual(req.OrderState) {
-				ourRequest := req.OrderState[ourId]
+			if AllValuesEqual(req) {
+				ourRequest := req[ourId]
 				if ourRequest == servicedOrder {
 					return reqFloor, reqBtn, noOrder
 				} else if ourRequest == unconfirmedOrder {
@@ -207,22 +213,22 @@ func ConsensusTransitionSingleHall(ourId string, hallRequests [][]SyncOrder) (in
 func NewSyncOrderSystem(initialKey string) SyncOrderSystem {
 	// Initialize HallRequests with fixed sizes.
 	initMap := SyncOrder{}
-	initMap.OrderState = make(map[string]int)
-	initMap.OrderState[initialKey] = unknownOrder // Init with unknown to just join NW
+	initMap = make(map[string]int)
+	initMap[initialKey] = unknownOrder // Init with unknown to just join NW
 	hallRequests := [][]SyncOrder{{initMap, initMap}, {initMap, initMap}, {initMap, initMap}, {initMap, initMap}}
 	for i := 0; i < 4; i++ {
 		for j := 0; j < 2; j++ {
-			initMap.OrderState = make(map[string]int)
-			initMap.OrderState[initialKey] = unknownOrder // Init with unknown to just join NW
-			hallRequests[i][j] = SyncOrder{OrderState: map[string]int{initialKey: unknownOrder}}
+			initMap = make(map[string]int)
+			initMap[initialKey] = unknownOrder // Init with unknown to just join NW
+			hallRequests[i][j] = map[string]int{initialKey: unknownOrder}
 		}
 	}
 
 	// Initialize CabRequests with 4 SyncOrder elements for each key.
 	cabRequests := map[string][]SyncOrder{initialKey: {initMap, initMap, initMap, initMap}}
 	for i := 0; i < 4; i++ {
-		initMap.OrderState = make(map[string]int)
-		initMap.OrderState[initialKey] = unknownOrder // Init with unknown to just join NW
+		initMap = make(map[string]int)
+		initMap[initialKey] = unknownOrder // Init with unknown to just join NW
 		cabRequests[initialKey][i] = initMap
 	}
 	return SyncOrderSystem{
@@ -233,8 +239,9 @@ func NewSyncOrderSystem(initialKey string) SyncOrderSystem {
 
 func newOrderSystem(id string) OrderSystem {
 	cabRequests := make(map[string][]int)
+	cabRequests[id] = make([]int, 4)
 	for i := 0; i < 4; i++ {
-		cabRequests[id] = append(cabRequests[id], unknownOrder)
+		cabRequests[id][i] = unknownOrder
 	}
 
 	return OrderSystem{
@@ -263,11 +270,11 @@ func AllValuesEqual(m map[string]int) bool {
 func systemToSyncOrderSystem(ourId string, syncOrderSystem SyncOrderSystem, orderSystem OrderSystem) SyncOrderSystem {
 	for i, floor := range orderSystem.HallRequests {
 		for j, req := range floor {
-			syncOrderSystem.HallRequests[i][j].OrderState[ourId] = req
+			syncOrderSystem.HallRequests[i][j][ourId] = req
 		}
 	}
 	for i, req := range orderSystem.CabRequests[ourId] {
-		syncOrderSystem.CabRequests[ourId][i].OrderState[ourId] = req
+		syncOrderSystem.CabRequests[ourId][i][ourId] = req
 	}
 
 	return syncOrderSystem
@@ -278,11 +285,11 @@ func SyncSystemToOrderSystem(ourId string, orderSystem SyncOrderSystem) OrderSys
 
 	for i, floor := range orderSystem.HallRequests {
 		for j, req := range floor {
-			orderSys.HallRequests[i][j] = req.OrderState[ourId]
+			orderSys.HallRequests[i][j] = req[ourId]
 		}
 	}
 	for i, req := range orderSystem.CabRequests[ourId] {
-		orderSys.CabRequests[ourId][i] = req.OrderState[ourId]
+		orderSys.CabRequests[ourId][i] = req[ourId]
 	}
 	return orderSys
 }
@@ -303,11 +310,11 @@ func SyncOrderSystemToElevatorSystem(elevatorSystem ElevatorState, ourId string,
 
 	for i, floor := range OrderSystem.HallRequests {
 		for j, req := range floor {
-			hraElevSys.HallRequests[i][j] = req.OrderState[ourId]
+			hraElevSys.HallRequests[i][j] = req[ourId]
 		}
 	}
 	for i, req := range OrderSystem.CabRequests[ourId] {
-		hraElevSys.ElevatorStates[ourId].CabRequests[i] = req.OrderState[ourId]
+		hraElevSys.ElevatorStates[ourId].CabRequests[i] = req[ourId]
 	}
 	return hraElevSys
 }

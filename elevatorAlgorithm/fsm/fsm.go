@@ -26,20 +26,19 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 	doorTimer = time.NewTimer(0 * time.Second)
 	<-doorTimer.C // Drain channel
 
-	log.Println("Initializing")
+	log.Println("Initializing Elevator FSM")
 	elevState.Floor = elevio.GetFloor()
 	if elevState.Floor == -1 {
-		elevio.SetMotorDirection(elevio.MD_Down)
-		elevState.Direction = elevio.MD_Down
-		elevState.Behaviour = elevator.EB_Moving
+		elevState = onInitBetweenFloors(elevState)
 	}
+
 	for {
 		select {
 		case orderAssignments := <-orderAssignment:
 			elevState.Requests = orderAssignments
 			log.Println(elevState.Requests)
 			log.Println(elevState.Behaviour)
-			elevState.Behaviour, elevState.Direction = onNewAssignmentRequest(elevState)
+			elevState.Behaviour, elevState.Direction = updateAssignmentRequest(elevState)
 			setAllLights(elevState.Requests)
 
 			clearOrders <- newOrderAssignmentClear(elevState) // This must be run last to not clear orders at the wrong place
@@ -74,49 +73,14 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 	}
 }
 
-func setAllLights(confirmedOrders [][]bool) {
-	for floor := 0; floor < elevator.N_FLOORS; floor++ {
-		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
-			elevio.SetButtonLamp(elevio.ButtonType(btn), floor, confirmedOrders[floor][btn])
-		}
-	}
-}
-
-func OnInitBetweenFloors(e elevator.ElevatorState) elevator.ElevatorState {
+func onInitBetweenFloors(e elevator.ElevatorState) elevator.ElevatorState {
 	elevio.SetMotorDirection(elevio.MD_Down)
 	e.Direction = elevio.MD_Down
 	e.Behaviour = elevator.EB_Moving
 	return e
 }
 
-func newOrderAssignmentClear(elevState elevator.ElevatorState) requests.ClearFloorOrders {
-	emptyClear := requests.ClearFloorOrders{elevState.Floor, false, false, false}
-	var clearOrder requests.ClearFloorOrders
-	switch elevState.Behaviour {
-	case elevator.EB_DoorOpen:
-		orderToClearImmediately := requests.ClearAtFloor(elevState.Floor, elevState.Direction, elevState.Requests)
-		if orderToClearImmediately != emptyClear {
-			return orderToClearImmediately
-		}
-	case elevator.EB_Idle:
-		pair := requests.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Requests)
-
-		elevState.Direction = pair.Dir
-		elevState.Behaviour = pair.Behaviour
-
-		switch pair.Behaviour {
-		case elevator.EB_DoorOpen:
-			clearOrder.Floor = elevState.Floor
-			clearOrder.Cab = true
-			clearOrder.HallUp = requests.ShouldClearHallUp(elevState.Floor, elevState.Direction, elevState.Requests)
-			clearOrder.HallDown = requests.ShouldClearHallDown(elevState.Floor, elevState.Direction, elevState.Requests)
-			return clearOrder
-		}
-	}
-	return emptyClear
-}
-
-func onNewAssignmentRequest(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
+func updateAssignmentRequest(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
 	if requests.HaveOrders(elevState.Floor, elevState.Requests) { //Consider movign if statement out of function
 		switch elevState.Behaviour {
 		case elevator.EB_Idle:
@@ -134,11 +98,19 @@ func onNewAssignmentRequest(elevState elevator.ElevatorState) (elevator.Elevator
 				elevio.SetMotorDirection(elevState.Direction)
 			}
 		}
-		setAllLights(elevState.Requests)
-		return elevState.Behaviour, elevState.Direction
-	} else {
-		return elevator.EB_Idle, elevio.MD_Stop
 	}
+	return elevState.Behaviour, elevState.Direction
+}
+
+func newOrderAssignmentClear(elevState elevator.ElevatorState) requests.ClearFloorOrders {
+	emptyClear := requests.ClearFloorOrders{elevState.Floor, false, false, false}
+	if elevState.Behaviour == elevator.EB_DoorOpen {
+		orderToClearImmediately := requests.ClearAtFloor(elevState.Floor, elevState.Direction, elevState.Requests)
+		if orderToClearImmediately != emptyClear {
+			return orderToClearImmediately
+		}
+	}
+	return emptyClear
 }
 
 func OnFloorArrival(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour, requests.ClearFloorOrders) {
@@ -152,10 +124,10 @@ func OnFloorArrival(elevState elevator.ElevatorState) (elevator.ElevatorBehaviou
 			clearOrder.HallUp = requests.ShouldClearHallUp(elevState.Floor, elevState.Direction, elevState.Requests)
 			clearOrder.HallDown = requests.ShouldClearHallDown(elevState.Floor, elevState.Direction, elevState.Requests)
 
-			elevio.SetDoorOpenLamp(true)
 			log.Println("Resetting timer")
 			doorTimer.Reset(elevator.DOOR_OPEN_DURATION_S * time.Second)
 			elevState.Behaviour = elevator.EB_DoorOpen
+			elevio.SetDoorOpenLamp(true)
 		}
 	}
 	return elevState.Behaviour, clearOrder
@@ -172,7 +144,6 @@ func OnDoorTimeOut(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour
 		case elevator.EB_DoorOpen:
 			log.Println("Resetting timer in OnDoorTimeout")
 			doorTimer.Reset(elevator.DOOR_OPEN_DURATION_S * time.Second)
-			setAllLights(elevState.Requests)
 		case elevator.EB_Idle:
 			elevio.SetDoorOpenLamp(false)
 			elevio.SetMotorDirection(elevState.Direction)
@@ -182,4 +153,12 @@ func OnDoorTimeOut(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour
 		}
 	}
 	return elevState.Behaviour, elevState.Direction
+}
+
+func setAllLights(confirmedOrders [][]bool) {
+	for floor := 0; floor < elevator.N_FLOORS; floor++ {
+		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
+			elevio.SetButtonLamp(elevio.ButtonType(btn), floor, confirmedOrders[floor][btn])
+		}
+	}
 }
