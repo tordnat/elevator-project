@@ -65,7 +65,9 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 	var msgCounter uint64 = 0
 	var latestPeerList []string
 
-	elevatorSystem := ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop}
+	elevatorSystems := make(map[string]ElevatorState)
+	elevatorSystems[elevatorId] = ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop}
+
 	syncOrderSystem := NewSyncOrderSystem(elevatorId)
 
 	for {
@@ -73,28 +75,32 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 		case btn := <-btnEvent: //Got order
 			syncOrderSystem = AddOrder(elevatorId, syncOrderSystem, btn)
 			msgCounter += 1 //To prevent forgetting counter, this should perhaps be in a seperate function
-			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystem, SyncSystemToOrderSystem(elevatorId, syncOrderSystem)}
+			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncSystemToOrderSystem(elevatorId, syncOrderSystem)}
 
 		case networkMsg := <-networkReciever: //TODO: Add elevatorSystem
 			if networkMsg.Counter <= msgCounter && networkMsg.Id != elevatorId {
 				msgCounter += 1
 				break
 			}
+			elevatorSystems[networkMsg.Id] = networkMsg.ElevatorState
 			msgCounter = networkMsg.Counter
 			syncOrderSystem = Transition(elevatorId, networkMsg, syncOrderSystem)
-			hraOutput := hra.Decode(hra.AssignRequests(hra.Encode(SyncOrderSystemToElevatorSystem(elevatorSystem, elevatorId, syncOrderSystem))))[elevatorId]
+			hraOutput := hra.Decode(hra.AssignRequests(hra.Encode(SyncOrderSystemToElevatorSystem(elevatorSystems[elevatorId], elevatorId, syncOrderSystem))))[elevatorId]
 			if len(hraOutput) > 0 {
 				orderAssignment <- hraOutput
 			} else {
-				fmt.Println("Hra output empty, input to hra:", SyncOrderSystemToElevatorSystem(elevatorSystem, elevatorId, syncOrderSystem))
+				fmt.Println("Hra output empty, input to hra:", SyncOrderSystemToElevatorSystem(elevatorSystems[elevatorId], elevatorId, syncOrderSystem))
 			}
 		case peersUpdate := <-peersReciever:
 			latestPeerList = peersUpdate.Peers //Here we should also update the elevatorSystem map. Important to take the (hall)orders of lost peers before removing it
 			_ = latestPeerList
 		case elevator := <-elevatorSystemFromFSM:
-			elevatorSystem.Behaviour = elevator.Behaviour
-			elevatorSystem.Direction = elevator.Direction
-			elevatorSystem.Floor = elevator.Floor
+			var tmpElevator ElevatorState
+			tmpElevator.Behaviour = elevator.Behaviour
+			tmpElevator.Direction = elevator.Direction
+			tmpElevator.Floor = elevator.Floor
+			elevatorSystems[elevatorId] = tmpElevator
+
 		case orderToClear := <-orderCompleted:
 			//Transmit to network that we want to clear
 			//Bascially run a transition on our elevator system after having assigned the order as completed
@@ -110,7 +116,7 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 
 		case <-timer.C: //Timer reset, send new state update
 			msgCounter += 1
-			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystem, SyncSystemToOrderSystem(elevatorId, syncOrderSystem)}
+			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncSystemToOrderSystem(elevatorId, syncOrderSystem)}
 			timer.Reset(time.Millisecond * 500)
 		}
 	}
@@ -126,7 +132,7 @@ func AddOrder(ourId string, syncOrderSystem SyncOrderSystem, btn elevio.ButtonEv
 }
 
 func Transition(ourId string, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
-	//syncOrderSystem = addElevatorToSyncOrderSystem(ourId, networkMsg, syncOrderSystem)
+	syncOrderSystem = addElevatorToSyncOrderSystem(ourId, networkMsg, syncOrderSystem)
 	orderSystem := SyncSystemToOrderSystem(ourId, syncOrderSystem)
 	orderSystem.HallRequests = TransitionHallRequests(orderSystem.HallRequests, networkMsg.OrderSystem.HallRequests)
 
@@ -139,6 +145,34 @@ func Transition(ourId string, networkMsg StateMsg, syncOrderSystem SyncOrderSyst
 	syncOrderSystem = systemToSyncOrderSystem(ourId, syncOrderSystem, orderSystem)
 
 	return ConsensusBarrierTransition(ourId, syncOrderSystem)
+}
+
+// TODO: Add unit tests for this functon.
+func addElevatorToSyncOrderSystem(ourId string, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
+	//Update our records of the view networkElevator of our cabs
+	for floor, networkRequest := range networkMsg.OrderSystem.CabRequests[ourId] {
+		syncOrderSystem.CabRequests[networkMsg.Id][floor][networkMsg.Id] = networkRequest
+	}
+	//Update our records of the view networkElevator our
+	for floor, row := range networkMsg.OrderSystem.HallRequests {
+		for btn, networkRequest := range row {
+			syncOrderSystem.HallRequests[floor][btn][networkMsg.Id] = networkRequest
+		}
+	}
+
+	_, ok := syncOrderSystem.CabRequests[networkMsg.Id]
+	if !ok {
+		syncOrderSystem.CabRequests[networkMsg.Id] = make([]SyncOrder, len(syncOrderSystem.CabRequests[ourId]))
+	}
+	//Add/Update the cab requests of the other elevator into our own representation of them.
+	//Because we only add to our own representation here, we could have just used int for this. We could do this because we never run a consensus transition on anyone elses cab requests.
+	fmt.Println(syncOrderSystem.CabRequests[networkMsg.Id])
+	for floor, req := range networkMsg.OrderSystem.CabRequests[networkMsg.Id] {
+		syncOrderSystem.CabRequests[networkMsg.Id][floor] = make(SyncOrder)
+		syncOrderSystem.CabRequests[networkMsg.Id][floor][networkMsg.Id] = req
+	}
+
+	return syncOrderSystem
 }
 
 func TransitionOrder(currentOrder int, newOrder int) int {
@@ -276,7 +310,6 @@ func systemToSyncOrderSystem(ourId string, syncOrderSystem SyncOrderSystem, orde
 	for i, req := range orderSystem.CabRequests[ourId] {
 		syncOrderSystem.CabRequests[ourId][i][ourId] = req
 	}
-
 	return syncOrderSystem
 }
 

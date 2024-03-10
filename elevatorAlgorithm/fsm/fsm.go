@@ -9,11 +9,6 @@ import (
 	"time"
 )
 
-// IMPORTANT: functions should either be completly pure,
-// or they should communicate using channels and hardware.
-// E.g execution of actions vs mutating data
-// State transition functions may be the only exception, they return the new state. We could change the functions to be pure and return a list of HW actions, but a bit bloated?
-// There is no need to use terminology like confirmed orders here. Alle orders are bools in the fsm, therefore they are simply orders.
 var doorTimer *time.Timer
 
 func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrders, floorEvent chan int, obstructionEvent chan bool, elevStateToSync chan elevator.ElevatorState) {
@@ -21,7 +16,7 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 		{false, false, false},
 		{false, false, false},
 		{false, false, false},
-		{false, false, false}}} //This 2d array should be properly filled
+		{false, false, false}}}
 
 	doorTimer = time.NewTimer(0 * time.Second)
 	<-doorTimer.C // Drain channel
@@ -34,14 +29,13 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 
 	for {
 		select {
-		case orderAssignments := <-orderAssignment:
-			elevState.Requests = orderAssignments
+		case orders := <-orderAssignment:
+			elevState.Requests = orders
 			log.Println(elevState.Requests)
 			log.Println(elevState.Behaviour)
-			elevState.Behaviour, elevState.Direction = updateAssignmentRequest(elevState)
-			setAllLights(elevState.Requests)
-
-			clearOrders <- newOrderAssignmentClear(elevState) // This must be run last to not clear orders at the wrong place
+			elevState.Behaviour, elevState.Direction = updateOrders(elevState)
+			updateAllLights(elevState.Requests)
+			clearOrders <- OrdersToClear(elevState) // This must be run last to not clear orders at the wrong place
 
 		case floor := <-floorEvent:
 			elevState.Floor = floor
@@ -55,10 +49,7 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 			var clearOrder requests.ClearFloorOrders
 			clearOrder.Floor = elevState.Floor
 			clearOrder.Cab = true
-			clearOrder.HallUp = requests.ShouldClearHallUp(elevState.Floor,
-
-				elevState.Direction, elevState.Requests,
-			)
+			clearOrder.HallUp = requests.ShouldClearHallUp(elevState.Floor, elevState.Direction, elevState.Requests)
 			clearOrder.HallDown = requests.ShouldClearHallDown(elevState.Floor, elevState.Direction, elevState.Requests)
 			fmt.Println("Cleared order ", clearOrder, "after timeout")
 			clearOrders <- clearOrder
@@ -80,7 +71,7 @@ func onInitBetweenFloors(e elevator.ElevatorState) elevator.ElevatorState {
 	return e
 }
 
-func updateAssignmentRequest(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
+func updateOrders(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
 	if requests.HaveOrders(elevState.Floor, elevState.Requests) { //Consider movign if statement out of function
 		switch elevState.Behaviour {
 		case elevator.EB_Idle:
@@ -102,7 +93,7 @@ func updateAssignmentRequest(elevState elevator.ElevatorState) (elevator.Elevato
 	return elevState.Behaviour, elevState.Direction
 }
 
-func newOrderAssignmentClear(elevState elevator.ElevatorState) requests.ClearFloorOrders {
+func OrdersToClear(elevState elevator.ElevatorState) requests.ClearFloorOrders {
 	emptyClear := requests.ClearFloorOrders{elevState.Floor, false, false, false}
 	if elevState.Behaviour == elevator.EB_DoorOpen {
 		orderToClearImmediately := requests.ClearAtFloor(elevState.Floor, elevState.Direction, elevState.Requests)
@@ -124,7 +115,7 @@ func OnFloorArrival(elevState elevator.ElevatorState) (elevator.ElevatorBehaviou
 			clearOrder.HallUp = requests.ShouldClearHallUp(elevState.Floor, elevState.Direction, elevState.Requests)
 			clearOrder.HallDown = requests.ShouldClearHallDown(elevState.Floor, elevState.Direction, elevState.Requests)
 
-			log.Println("Resetting timer")
+			// log.Println("Resetting timer")
 			doorTimer.Reset(elevator.DOOR_OPEN_DURATION_S * time.Second)
 			elevState.Behaviour = elevator.EB_DoorOpen
 			elevio.SetDoorOpenLamp(true)
@@ -142,7 +133,7 @@ func OnDoorTimeOut(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour
 
 		switch elevState.Behaviour {
 		case elevator.EB_DoorOpen:
-			log.Println("Resetting timer in OnDoorTimeout")
+			// log.Println("Resetting timer in OnDoorTimeout")
 			doorTimer.Reset(elevator.DOOR_OPEN_DURATION_S * time.Second)
 		case elevator.EB_Idle:
 			elevio.SetDoorOpenLamp(false)
@@ -155,7 +146,7 @@ func OnDoorTimeOut(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour
 	return elevState.Behaviour, elevState.Direction
 }
 
-func setAllLights(confirmedOrders [][]bool) {
+func updateAllLights(confirmedOrders [][]bool) {
 	for floor := 0; floor < elevator.N_FLOORS; floor++ {
 		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
 			elevio.SetButtonLamp(elevio.ButtonType(btn), floor, confirmedOrders[floor][btn])

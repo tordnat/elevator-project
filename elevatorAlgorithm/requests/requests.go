@@ -16,37 +16,6 @@ type ClearFloorOrders struct {
 	Cab      bool
 }
 
-func RequestsAbove(currentFloor int, confirmedOrders [][]bool) bool {
-	for f := currentFloor + 1; f < elevator.N_FLOORS; f++ {
-		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
-			if confirmedOrders[f][btn] {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func RequestsBelow(currentFloor int, confirmedOrders [][]bool) bool {
-	for f := 0; f < currentFloor; f++ {
-		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
-			if confirmedOrders[f][btn] {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func RequestsHere(currentFloor int, confirmedOrders [][]bool) bool {
-	for btn := 0; btn < elevator.N_BUTTONS; btn++ {
-		if confirmedOrders[currentFloor][elevio.BT_Cab] {
-			return true
-		}
-	}
-	return false
-}
-
 func ChooseDirection(direction elevio.MotorDirection, floor int, confirmedOrders [][]bool) DirnBehaviourPair {
 	switch direction {
 	case elevio.MD_Up:
@@ -84,6 +53,38 @@ func ChooseDirection(direction elevio.MotorDirection, floor int, confirmedOrders
 
 	}
 }
+
+func RequestsAbove(currentFloor int, confirmedOrders [][]bool) bool {
+	for f := currentFloor + 1; f < elevator.N_FLOORS; f++ {
+		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
+			if confirmedOrders[f][btn] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func RequestsBelow(currentFloor int, confirmedOrders [][]bool) bool {
+	for f := 0; f < currentFloor; f++ {
+		for btn := 0; btn < elevator.N_BUTTONS; btn++ {
+			if confirmedOrders[f][btn] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func RequestsHere(currentFloor int, confirmedOrders [][]bool) bool {
+	for btn := 0; btn < elevator.N_BUTTONS; btn++ {
+		if confirmedOrders[currentFloor][elevio.BT_Cab] {
+			return true
+		}
+	}
+	return false
+}
+
 func HaveOrders(currentFloor int, confirmedOrders [][]bool) bool {
 	if RequestsHere(currentFloor, confirmedOrders) {
 		return true
