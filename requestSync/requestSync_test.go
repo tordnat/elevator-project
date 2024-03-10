@@ -126,14 +126,15 @@ func TestConsensusBarrier(t *testing.T) {
 
 }
 
-// func TestAddElevatorToSyncOrderSystem(t *testing.T) {
-// 	orderSys := requestSync.NewSyncOrderSystem("0")
-// 	elevtorMsg := requestSync.StateMsg{"1", 2, requestSync.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop}, requestSync.SyncSystemToOrderSystem("1", orderSys)}
-// 	orderSys = requestSync.AddElevatorToSyncOrderSystem("1", elevtorMsg, orderSys)
-// 	if orderSys.CabRequests["1"] != elevtorMsg.OrderSystem.CabRequests["1"] {
-// 		t.Error("Failed assert, elevator not added")
-// 	}
-// }
+func TestAddElevatorToSyncOrderSystem(t *testing.T) {
+	orderSys := requestSync.NewSyncOrderSystem("0")
+	elevtorMsg := requestSync.StateMsg{"1", 2, requestSync.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop}, requestSync.SyncSystemToOrderSystem("1", orderSys)}
+	orderSys = requestSync.AddElevatorToSyncOrderSystem("1", elevtorMsg, orderSys)
+
+	if orderSys.CabRequests["1"] != elevtorMsg.OrderSystem.CabRequests["1"] {
+		t.Error("Failed assert, elevator not added")
+	}
+}
 
 func areEqualArr(a, b []int) bool {
 	if len(a) != len(b) {
