@@ -67,6 +67,13 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 
 	elevatorSystems := make(map[string]ElevatorState)
 	elevatorSystems[elevatorId] = ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop}
+	tmp := <-elevatorSystemFromFSM
+
+	var tmpElevator ElevatorState
+	tmpElevator.Behaviour = tmp.Behaviour
+	tmpElevator.Direction = tmp.Direction
+	tmpElevator.Floor = tmp.Floor
+	elevatorSystems[elevatorId] = tmpElevator
 
 	syncOrderSystem := NewSyncOrderSystem(elevatorId)
 
@@ -85,12 +92,20 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 			elevatorSystems[networkMsg.Id] = networkMsg.ElevatorState
 			msgCounter = networkMsg.Counter
 			syncOrderSystem = Transition(elevatorId, networkMsg, syncOrderSystem)
-			hraOutput := hra.Decode(hra.AssignRequests(hra.Encode(SyncOrderSystemToElevatorSystem(elevatorSystems[elevatorId], elevatorId, syncOrderSystem))))[elevatorId]
+
+			if elevatorSystems[elevatorId].Floor == -1 {
+				//log.Println("Elevator floor is -1, will not send to hra")
+				//log.Println("Behaviour: ", elevatorSystems[elevatorId].Behaviour)
+				continue
+			}
+
+			hraOutput := hra.Decode(hra.AssignRequests(hra.Encode(SyncOrderSystemToElevatorSystem(elevatorSystems, elevatorId, syncOrderSystem))))[elevatorId]
 			if len(hraOutput) > 0 {
 				orderAssignment <- hraOutput
 			} else {
-				fmt.Println("Hra output empty, input to hra:", SyncOrderSystemToElevatorSystem(elevatorSystems[elevatorId], elevatorId, syncOrderSystem))
+				fmt.Println("Hra output empty, input to hra:", SyncOrderSystemToElevatorSystem(elevatorSystems, elevatorId, syncOrderSystem))
 			}
+
 		case peersUpdate := <-peersReciever:
 			latestPeerList = peersUpdate.Peers //Here we should also update the elevatorSystem map. Important to take the (hall)orders of lost peers before removing it
 			_ = latestPeerList
@@ -132,7 +147,7 @@ func AddOrder(ourId string, syncOrderSystem SyncOrderSystem, btn elevio.ButtonEv
 }
 
 func Transition(ourId string, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
-	syncOrderSystem = addElevatorToSyncOrderSystem(ourId, networkMsg, syncOrderSystem)
+	syncOrderSystem = AddElevatorToSyncOrderSystem(ourId, networkMsg, syncOrderSystem)
 	orderSystem := SyncSystemToOrderSystem(ourId, syncOrderSystem)
 	orderSystem.HallRequests = TransitionHallRequests(orderSystem.HallRequests, networkMsg.OrderSystem.HallRequests)
 
@@ -141,6 +156,7 @@ func Transition(ourId string, networkMsg StateMsg, syncOrderSystem SyncOrderSyst
 		orderSystem.CabRequests[ourId] = TransitionCabRequests(orderSystem.CabRequests[ourId], networkMsg.OrderSystem.CabRequests[ourId])
 	} else {
 		log.Println("Could not transition cabs. Elevator", networkMsg.Id, "does not have our (", ourId, ") requests. Have they received our state?")
+		log.Println(syncOrderSystem)
 	}
 	syncOrderSystem = systemToSyncOrderSystem(ourId, syncOrderSystem, orderSystem)
 
@@ -148,10 +164,10 @@ func Transition(ourId string, networkMsg StateMsg, syncOrderSystem SyncOrderSyst
 }
 
 // TODO: Add unit tests for this functon.
-func addElevatorToSyncOrderSystem(ourId string, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
+func AddElevatorToSyncOrderSystem(ourId string, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
 	//Update our records of the view networkElevator of our cabs
 	for floor, networkRequest := range networkMsg.OrderSystem.CabRequests[ourId] {
-		syncOrderSystem.CabRequests[networkMsg.Id][floor][networkMsg.Id] = networkRequest
+		syncOrderSystem.CabRequests[ourId][floor][networkMsg.Id] = networkRequest
 	}
 	//Update our records of the view networkElevator our
 	for floor, row := range networkMsg.OrderSystem.HallRequests {
@@ -166,7 +182,6 @@ func addElevatorToSyncOrderSystem(ourId string, networkMsg StateMsg, syncOrderSy
 	}
 	//Add/Update the cab requests of the other elevator into our own representation of them.
 	//Because we only add to our own representation here, we could have just used int for this. We could do this because we never run a consensus transition on anyone elses cab requests.
-	fmt.Println(syncOrderSystem.CabRequests[networkMsg.Id])
 	for floor, req := range networkMsg.OrderSystem.CabRequests[networkMsg.Id] {
 		syncOrderSystem.CabRequests[networkMsg.Id][floor] = make(SyncOrder)
 		syncOrderSystem.CabRequests[networkMsg.Id][floor][networkMsg.Id] = req
@@ -327,28 +342,39 @@ func SyncSystemToOrderSystem(ourId string, orderSystem SyncOrderSystem) OrderSys
 	return orderSys
 }
 
-func SyncOrderSystemToElevatorSystem(elevatorSystem ElevatorState, ourId string, OrderSystem SyncOrderSystem) hra.ElevatorSystem {
-	hraElevSys := hra.ElevatorSystem{
-		HallRequests: [][]int{
-			{noOrder, noOrder}, {noOrder, noOrder}, {noOrder, noOrder}, {noOrder, noOrder},
-		},
-		ElevatorStates: map[string]hra.LocalElevatorState{},
-	}
-	hraElevSys.ElevatorStates[ourId] = hra.LocalElevatorState{
+// bæs
+func GenerateLocalElev(elevatorSystem ElevatorState, id string, OrderSystem SyncOrderSystem) hra.LocalElevatorState {
+	localElevState := hra.LocalElevatorState{
 		Behaviour:   elevatorSystem.Behaviour,
 		Floor:       elevatorSystem.Floor,
 		Direction:   elevatorSystem.Direction,
-		CabRequests: []int{noOrder, noOrder, noOrder, noOrder},
+		CabRequests: make([]int, len(OrderSystem.CabRequests[id])),
 	}
 
+	for i, req := range OrderSystem.CabRequests[id] {
+		localElevState.CabRequests[i] = req[id]
+	}
+
+	return localElevState
+}
+
+func SyncOrderSystemToElevatorSystem(elevatorSystems map[string]ElevatorState, ourId string, OrderSystem SyncOrderSystem) hra.ElevatorSystem {
+	hraElevSys := hra.ElevatorSystem{
+		HallRequests:   [][]int{{unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}},
+		ElevatorStates: map[string]hra.LocalElevatorState{},
+	}
+
+	//Fill halls
 	for i, floor := range OrderSystem.HallRequests {
 		for j, req := range floor {
 			hraElevSys.HallRequests[i][j] = req[ourId]
 		}
 	}
-	for i, req := range OrderSystem.CabRequests[ourId] {
-		hraElevSys.ElevatorStates[ourId].CabRequests[i] = req[ourId]
+	//Loop through all IDs and add elevatorsystem pr id
+	for id, _ := range OrderSystem.CabRequests {
+		hraElevSys.ElevatorStates[id] = GenerateLocalElev(elevatorSystems[id], id, OrderSystem)
 	}
+
 	return hraElevSys
 }
 

@@ -4,7 +4,6 @@ import (
 	"elevatorAlgorithm/elevator"
 	"elevatorAlgorithm/requests"
 	"elevatorDriver/elevio"
-	"fmt"
 	"log"
 	"time"
 )
@@ -26,13 +25,13 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 	if elevState.Floor == -1 {
 		elevState = onInitBetweenFloors(elevState)
 	}
-
+	elevStateToSync <- elevState
 	for {
 		select {
 		case orders := <-orderAssignment:
 			elevState.Requests = orders
-			log.Println(elevState.Requests)
-			log.Println(elevState.Behaviour)
+			//log.Println(elevState.Requests)
+			//log.Println(elevState.Behaviour)
 			elevState.Behaviour, elevState.Direction = updateOrders(elevState)
 			updateAllLights(elevState.Requests)
 			clearOrders <- OrdersToClear(elevState) // This must be run last to not clear orders at the wrong place
@@ -44,20 +43,20 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 			clearOrders <- clearOrder
 
 		case <-doorTimer.C:
-			log.Println("Door timeout")
+			//log.Println("Door timeout")
 			elevState.Behaviour, elevState.Direction = OnDoorTimeOut(elevState)
 			var clearOrder requests.ClearFloorOrders
 			clearOrder.Floor = elevState.Floor
 			clearOrder.Cab = true
 			clearOrder.HallUp = requests.ShouldClearHallUp(elevState.Floor, elevState.Direction, elevState.Requests)
 			clearOrder.HallDown = requests.ShouldClearHallDown(elevState.Floor, elevState.Direction, elevState.Requests)
-			fmt.Println("Cleared order ", clearOrder, "after timeout")
+			//fmt.Println("Cleared order ", clearOrder, "after timeout")
 			clearOrders <- clearOrder
 
 		case <-obstructionEvent:
 			if elevState.Behaviour == elevator.EB_DoorOpen {
 				doorTimer.Reset(elevator.DOOR_OPEN_DURATION_S * time.Second)
-				log.Println("Resetting timer, obstructed")
+				//log.Println("Resetting timer, obstructed")
 			}
 		}
 		elevStateToSync <- elevState //Must find out if this is a good place to sync elevState
@@ -83,7 +82,7 @@ func updateOrders(elevState elevator.ElevatorState) (elevator.ElevatorBehaviour,
 			switch pair.Behaviour {
 			case elevator.EB_DoorOpen:
 				elevio.SetDoorOpenLamp(true)
-				log.Println("Resetting timer onNewAssignmentRequest from IDLE")
+				//log.Println("Resetting timer onNewAssignmentRequest from IDLE")
 				doorTimer.Reset(elevator.DOOR_OPEN_DURATION_S * time.Second)
 			case elevator.EB_Moving:
 				elevio.SetMotorDirection(elevState.Direction)

@@ -35,7 +35,7 @@ func main() {
 	orderCompleted := make(chan requests.ClearFloorOrders)
 	elevStateFromFSM := make(chan elevator.ElevatorState)
 
-	go fsm.FSM(orderAssignment, orderCompleted, floorEvent, obstructionEvent, elevStateFromFSM) //maybe add timer also?
+	go fsm.FSM(orderAssignment, orderCompleted, floorEvent, obstructionEvent, elevStateFromFSM)
 	go requestSync.Sync(elevStateFromFSM, elevatorId, orderAssignment, orderCompleted)
 	for {
 	}
