@@ -33,6 +33,7 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 		case orderAssignments := <-orderAssignment:
 			log.Println("New assignments ", orderAssignments)
 			elevState.Requests = orderAssignments
+			log.Println(elevState.Requests)
 			elevState.Behaviour, elevState.Direction = onNewAssignmentRequest(elevState)
 			clearOrders <- newOrderAssignmentClear(elevState) // This must be run last to not clear orders at the wrong place
 
@@ -52,7 +53,7 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 				clearOrder.Cab = true
 				clearOrder.HallUp = requests.ShouldClearHallUp(elevState.Floor, elevState.Direction, elevState.Requests)
 				clearOrder.HallDown = requests.ShouldClearHallDown(elevState.Floor, elevState.Direction, elevState.Requests)
-				clearOrders <- requests.ClearFloorOrders{elevState.Floor, true, true, true}
+				clearOrders <- clearOrder
 			}
 
 		case <-obstructionEvent:

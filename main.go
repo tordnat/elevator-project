@@ -33,8 +33,8 @@ func main() {
 	go elevio.PollObstructionSwitch(obstructionEvent)
 
 	//All channels of FSM go here
-	orderAssignment := make(chan [][]bool)                 // This type is perhaps a bit weirdly defined. Events to this channel should be generated from HRA assignments.
-	orderCompleted := make(chan requests.ClearFloorOrders) //TODO: handle completed order deletion. Maybe a channel is overkill
+	orderAssignment := make(chan [][]bool, 1) //Buffered to prevent deadock between assugnemnt and clearing
+	orderCompleted := make(chan requests.ClearFloorOrders)
 	elevStateFromFSM := make(chan elevator.ElevatorState)
 
 	go fsm.FSM(orderAssignment, orderCompleted, floorEvent, obstructionEvent, elevStateFromFSM) //maybe add timer also?
