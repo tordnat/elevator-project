@@ -7,7 +7,6 @@ import (
 	"elevatorAlgorithm/fsm"
 	"elevatorAlgorithm/hra"
 	"elevatorAlgorithm/requests"
-	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
 	"fmt"
 	"log"
@@ -23,7 +22,6 @@ func main() {
 	elevatorPort, elevatorId := cmd.InitCommandLineArgs(os.Args)
 	elevio.Init(fmt.Sprintf("localhost:%d", elevatorPort), elevator.N_FLOORS)
 
-	timer.Initialize()
 	buttonEvent := make(chan elevio.ButtonEvent)
 	floorEvent := make(chan int)
 	obstructionEvent := make(chan bool)

@@ -6,7 +6,6 @@ import (
 	"elevatorAlgorithm/requests"
 	"elevatorDriver/elevio"
 	"fmt"
-	"log"
 	"networkDriver/bcast"
 	"networkDriver/peers"
 	"time"
@@ -97,7 +96,6 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 			elevatorSystem.Behaviour = elevator.Behaviour
 			elevatorSystem.Direction = elevator.Direction
 			elevatorSystem.Floor = elevator.Floor
-
 		case orderToClear := <-orderCompleted:
 			//Transmit to network that we want to clear
 			//Bascially run a transition on our elevator system after having assigned the order as completed
@@ -115,7 +113,6 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 			msgCounter += 1
 			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystem, SyncSystemToOrderSystem(elevatorId, syncOrderSystem)}
 			timer.Reset(time.Millisecond * 500)
-			fmt.Println("Transmitted to network")
 		}
 	}
 }
@@ -126,10 +123,6 @@ func AddOrder(ourId string, syncOrderSystem SyncOrderSystem, btn elevio.ButtonEv
 	} else {
 		syncOrderSystem.HallRequests[btn.Floor][btn.Button].OrderState[ourId] = TransitionOrder(syncOrderSystem.HallRequests[btn.Floor][btn.Button].OrderState[ourId], unconfirmedOrder)
 	}
-	fmt.Println("Button: ", btn)
-	fmt.Println("Cabs: ", syncOrderSystem.CabRequests)
-	fmt.Println("Halls: ", syncOrderSystem.HallRequests)
-
 	return syncOrderSystem
 }
 
@@ -160,12 +153,10 @@ func TransitionOrder(currentOrder int, newOrder int) int {
 }
 
 func ConsensusBarrierTransition(ourId string, OrderSystem SyncOrderSystem) SyncOrderSystem {
-	fmt.Println("In barrier transition")
 	//Transition all cabs
 	{
 		floor, newState := ConsensusTransitionSingleCab(ourId, OrderSystem.CabRequests)
 		for floor != -1 && newState != -1 { //Can this create nasty edge cases? Maybe have a validation test earlier to check for unknown orders
-			fmt.Println("Consensus Barrier in cab ", floor, newState)
 			OrderSystem.CabRequests[ourId][floor].OrderState[ourId] = newState
 			floor, newState = ConsensusTransitionSingleCab(ourId, OrderSystem.CabRequests)
 		}
@@ -175,7 +166,6 @@ func ConsensusBarrierTransition(ourId string, OrderSystem SyncOrderSystem) SyncO
 	{
 		floor, btn, newState := ConsensusTransitionSingleHall(ourId, OrderSystem.HallRequests)
 		for floor != -1 && btn != -1 {
-			fmt.Println("Consensus floor and btn (should be -1 -1 to not trans): ", floor, btn)
 			OrderSystem.HallRequests[floor][btn].OrderState[ourId] = newState
 			floor, btn, newState = ConsensusTransitionSingleHall(ourId, OrderSystem.HallRequests)
 		}
@@ -235,7 +225,6 @@ func NewSyncOrderSystem(initialKey string) SyncOrderSystem {
 		initMap.OrderState[initialKey] = unknownOrder // Init with unknown to just join NW
 		cabRequests[initialKey][i] = initMap
 	}
-	log.Println("Made cabRequests:", cabRequests)
 	return SyncOrderSystem{
 		HallRequests: hallRequests,
 		CabRequests:  cabRequests,
@@ -303,14 +292,13 @@ func SyncOrderSystemToElevatorSystem(elevatorSystem ElevatorState, ourId string,
 		HallRequests: [][]int{
 			{noOrder, noOrder}, {noOrder, noOrder}, {noOrder, noOrder}, {noOrder, noOrder},
 		},
-		ElevatorStates: map[string]hra.LocalElevatorState{
-			"0": {
-				Behaviour:   elevatorSystem.Behaviour,
-				Floor:       elevatorSystem.Floor,
-				Direction:   elevatorSystem.Direction,
-				CabRequests: []int{noOrder, noOrder, noOrder, noOrder},
-			},
-		},
+		ElevatorStates: map[string]hra.LocalElevatorState{},
+	}
+	hraElevSys.ElevatorStates[ourId] = hra.LocalElevatorState{
+		Behaviour:   elevatorSystem.Behaviour,
+		Floor:       elevatorSystem.Floor,
+		Direction:   elevatorSystem.Direction,
+		CabRequests: []int{noOrder, noOrder, noOrder, noOrder},
 	}
 
 	for i, floor := range OrderSystem.HallRequests {
