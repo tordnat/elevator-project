@@ -78,7 +78,7 @@ func RequestsBelow(currentFloor int, confirmedOrders [][]bool) bool {
 
 func RequestsHere(currentFloor int, confirmedOrders [][]bool) bool {
 	for btn := 0; btn < elevator.N_BUTTONS; btn++ {
-		if confirmedOrders[currentFloor][elevio.BT_Cab] {
+		if confirmedOrders[currentFloor][btn] {
 			return true
 		}
 	}
