@@ -130,13 +130,13 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 			//Transmit to network that we want to clear
 			//Bascially run a transition on our elevator system after having assigned the order as completed
 			if orderToClear.Cab {
-				syncOrderSystem.CabRequests[elevatorId][orderToClear.Floor][elevatorId] = noOrder
+				syncOrderSystem.CabRequests[elevatorId][orderToClear.Floor][elevatorId] = TransitionOrder(syncOrderSystem.CabRequests[elevatorId][orderToClear.Floor][elevatorId], servicedOrder)
 			}
 			if orderToClear.HallUp {
-				syncOrderSystem.HallRequests[orderToClear.Floor][0][elevatorId] = noOrder
+				syncOrderSystem.HallRequests[orderToClear.Floor][0][elevatorId] = TransitionOrder(syncOrderSystem.HallRequests[orderToClear.Floor][0][elevatorId], servicedOrder)
 			}
 			if orderToClear.HallDown {
-				syncOrderSystem.HallRequests[orderToClear.Floor][1][elevatorId] = noOrder
+				syncOrderSystem.HallRequests[orderToClear.Floor][1][elevatorId] = TransitionOrder(syncOrderSystem.HallRequests[orderToClear.Floor][1][elevatorId], servicedOrder)
 			}
 
 		case <-timer.C: //Timer reset, send new state update
@@ -158,6 +158,7 @@ func AddOrder(localId string, syncOrderSystem SyncOrderSystem, btn elevio.Button
 
 func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem SyncOrderSystem) SyncOrderSystem {
 	updatedSyncOrderSystem = AddElevatorToSyncOrderSystem(localId, networkMsg, updatedSyncOrderSystem)
+
 	orderSystem := SyncOrderSystemToOrderSystem(localId, updatedSyncOrderSystem)
 	orderSystem.HallRequests = TransitionHallRequests(orderSystem.HallRequests, networkMsg.OrderSystem.HallRequests)
 
