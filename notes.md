@@ -30,3 +30,4 @@ Have *n* elevators where instead of executing order, we print out when we have a
 
 ### CAB sync/consensus
 We have to have consensus on cabs, same as hall requests because of the spec about not loosing orders.
+
