@@ -80,21 +80,22 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 		case btn := <-btnEvent: //Got order
 			syncOrderSystem = AddOrder(elevatorId, syncOrderSystem, btn)
 			msgCounter += 1 //To prevent forgetting counter, this should perhaps be in a seperate function
-			//networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncSystemToOrderSystem(elevatorId, syncOrderSystem)}
+			log.Println("Tried to add order", btn)
+			log.Println("Current orderSys", SyncSystemToOrderSystem(elevatorId, syncOrderSystem).CabRequests)
+			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncSystemToOrderSystem(elevatorId, syncOrderSystem)} //
 
 		case networkMsg := <-networkReciever: //TODO: Add elevatorSystem
 			if networkMsg.Counter <= msgCounter && len(syncOrderSystem.CabRequests) != 1 && networkMsg.Id == elevatorId { //To only listen to our own message when we are alone
 				msgCounter += 1
-				continue
+				continue //Should this be a break?
 			}
 			elevatorSystems[networkMsg.Id] = networkMsg.ElevatorState
 			msgCounter = networkMsg.Counter
 			syncOrderSystem = Transition(elevatorId, networkMsg, syncOrderSystem)
 
 			if elevatorSystems[elevatorId].Floor == -1 {
-				//log.Println("Elevator floor is -1, will not send to hra")
-				//log.Println("Behaviour: ", elevatorSystems[elevatorId].Behaviour)
-				continue
+				log.Println("Elevator floor is -1, will not send to hra")
+				continue //Should this be a break?
 			}
 
 			hraOutput := hra.Decode(hra.AssignRequests(hra.Encode(SyncOrderSystemToElevatorSystem(elevatorSystems, elevatorId, syncOrderSystem))))[elevatorId]
@@ -177,7 +178,7 @@ func AddElevatorToSyncOrderSystem(ourId string, networkMsg StateMsg, syncOrderSy
 	for floor, networkRequest := range networkMsg.OrderSystem.CabRequests[ourId] {
 		syncOrderSystem.CabRequests[ourId][floor][networkMsg.Id] = networkRequest
 	}
-	//Update our records of the view networkElevator our
+	//Update our records of the view networkElevator has of halls
 	for floor, row := range networkMsg.OrderSystem.HallRequests {
 		for btn, networkRequest := range row {
 			syncOrderSystem.HallRequests[floor][btn][networkMsg.Id] = networkRequest
@@ -190,11 +191,12 @@ func AddElevatorToSyncOrderSystem(ourId string, networkMsg StateMsg, syncOrderSy
 	}
 	//Add/Update the cab requests of the other elevator into our own representation of them.
 	//Because we only add to our own representation here, we could have just used int for this. We could do this because we never run a consensus transition on anyone elses cab requests.
+	//This also means accessing syncOrderSystem.CabRequests[networkMsg.Id][floor][NETWORKID] is always wrong
 	for floor, req := range networkMsg.OrderSystem.CabRequests[networkMsg.Id] {
 		syncOrderSystem.CabRequests[networkMsg.Id][floor] = make(SyncOrder)
-		syncOrderSystem.CabRequests[networkMsg.Id][floor][networkMsg.Id] = req
+		syncOrderSystem.CabRequests[networkMsg.Id][floor][ourId] = req //This only adds
 	}
-
+	log.Println("Added elev", networkMsg.Id, "to syncSys:", syncOrderSystem.CabRequests)
 	return syncOrderSystem
 }
 
@@ -330,24 +332,28 @@ func systemToSyncOrderSystem(ourId string, syncOrderSystem SyncOrderSystem, orde
 			syncOrderSystem.HallRequests[i][j][ourId] = req
 		}
 	}
-	for i, req := range orderSystem.CabRequests[ourId] {
-		syncOrderSystem.CabRequests[ourId][i][ourId] = req
+	//Should add other cabs aswell here
+	for id, cabs := range syncOrderSystem.CabRequests {
+		for i, req := range cabs {
+			syncOrderSystem.CabRequests[id][i][ourId] = req[ourId]
+		}
 	}
 	return syncOrderSystem
 }
 
-func SyncSystemToOrderSystem(ourId string, orderSystem SyncOrderSystem) OrderSystem {
+func SyncSystemToOrderSystem(ourId string, syncOrderSystem SyncOrderSystem) OrderSystem {
 	var newOrderSystem OrderSystem = newOrderSystem(ourId)
 
-	for i, floor := range orderSystem.HallRequests {
+	for i, floor := range syncOrderSystem.HallRequests {
 		for j, req := range floor {
 			newOrderSystem.HallRequests[i][j] = req[ourId]
 		}
 	}
-	for id, cabs := range orderSystem.CabRequests {
+	//We want to add
+	for id, cabs := range syncOrderSystem.CabRequests {
 		newOrderSystem.CabRequests[id] = make([]int, 4) //TODO do not hard code numbers
 		for i, req := range cabs {
-			newOrderSystem.CabRequests[id][i] = req[id]
+			newOrderSystem.CabRequests[id][i] = req[ourId] //This is dangrous because we can store more state than we should. E.g req[id] is wrong here. See comments in AddElevatorToSyncOrderSystem
 		}
 	}
 
