@@ -455,23 +455,6 @@ func TransitionHallRequests(internalRequests [][]int, networkRequests [][]int) [
 	return internalRequests
 }
 
-func ReqToString(req int) string {
-	switch req {
-	case unknownOrder:
-		return "unknown"
-	case noOrder:
-		return "no request"
-	case unconfirmedOrder:
-		return "unconfirmed"
-	case confirmedOrder:
-		return "confirmed"
-	case servicedOrder:
-		return "serviced order"
-	default:
-		return "Invalid"
-	}
-}
-
 func updateHallLights(hall_orders [][]int) {
 	for floor, floorRow := range hall_orders {
 		for btn, order := range floorRow {

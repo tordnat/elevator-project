@@ -37,28 +37,3 @@ func (eb ElevatorBehaviour) String() string {
 		return "EB_UNDEFINED"
 	}
 }
-
-/* Commented because it imports from HRA which creates an import cycle. Type ElevatorSystem should not be in hra, so can be uncommented when that is removed
-func PrintElevatorSystem(elevatorSystem hra.ElevatorSystem) {
-	fmt.Println("Elevator System State:")
-	for id, state := range elevatorSystem.ElevatorStates {
-		fmt.Printf("Elevator ID: %s\n", id)
-		fmt.Printf("  Behaviour: %s, Floor: %d, Direction: %s\n", state.Behaviour, state.Floor, state.Direction)
-		fmt.Println("  Cab Requests:")
-		for i, req := range state.CabRequests {
-			fmt.Printf("    Floor%d - %s\n", i, reqToString(req))
-		}
-	}
-
-	fmt.Println("Hall Requests:")
-	// Reverse iteration of the HallRequests with a single loop
-	for i := len(elevatorSystem.HallRequests) - 1; i >= 0; i-- {
-		fmt.Printf("    Floor%d: ", i)
-		for _, req := range elevatorSystem.HallRequests[i] {
-			fmt.Printf("%s ", reqToString(req))
-		}
-		fmt.Println()
-	}
-}
-*/
-// String method to print the RequestStatus as a string
