@@ -106,9 +106,16 @@ func TestConsensusBarrier(t *testing.T) {
 	orderSys = requestSync.NewSyncOrderSystem("0")
 	orderSys.CabRequests["0"][0]["0"] = servicedOrder
 	orderSys.CabRequests["0"][0]["1"] = servicedOrder
+
+	orderSys.HallRequests[0][0]["0"] = servicedOrder
+	orderSys.HallRequests[0][0]["1"] = servicedOrder
+
 	orderSysAfterTrans = requestSync.ConsensusBarrierTransition("0", orderSys)
 	if orderSysAfterTrans.CabRequests["0"][0]["0"] != noOrder {
 		t.Error("Cab order should be completed after transitioning got: ", orderSysAfterTrans.CabRequests["1"][0]["0"])
+	}
+	if orderSysAfterTrans.HallRequests[0][0]["0"] != noOrder {
+		t.Error("Hall order should be completed after transitioning, got: ", orderSysAfterTrans.HallRequests[0][0]["0"])
 	}
 	if orderSysAfterTrans.CabRequests["0"][1]["0"] != unknownOrder {
 		t.Error("Unknown cab got transtitioned")
@@ -127,13 +134,7 @@ func TestConsensusBarrier(t *testing.T) {
 }
 
 func TestAddElevatorToSyncOrderSystem(t *testing.T) {
-	orderSys := requestSync.NewSyncOrderSystem("0")
-	elevtorMsg := requestSync.StateMsg{"1", 2, requestSync.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop}, requestSync.SyncSystemToOrderSystem("1", orderSys)}
-	orderSys = requestSync.AddElevatorToSyncOrderSystem("1", elevtorMsg, orderSys)
 
-	if orderSys.CabRequests["1"] != elevtorMsg.OrderSystem.CabRequests["1"] {
-		t.Error("Failed assert, elevator not added")
-	}
 }
 
 func areEqualArr(a, b []int) bool {

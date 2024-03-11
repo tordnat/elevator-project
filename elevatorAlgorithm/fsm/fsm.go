@@ -21,10 +21,15 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 	<-doorTimer.C // Drain channel
 
 	log.Println("Initializing Elevator FSM")
-	elevState.Floor = elevio.GetFloor()
-	if elevState.Floor == -1 {
-		elevState = onInitBetweenFloors(elevState)
+	elevState = onInitBetweenFloors(elevState)
+	for elevio.GetFloor() == -1 {
+
 	}
+	elevio.SetMotorDirection(elevio.MD_Stop)
+	elevState.Direction = elevio.MD_Stop
+	elevState.Behaviour = elevator.EB_Idle
+	elevState.Floor = elevio.GetFloor()
+
 	elevStateToSync <- elevState
 	for {
 		select {
