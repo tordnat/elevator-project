@@ -21,3 +21,13 @@ We may also need to add extra explicit fault tolerance so that we are certain ca
 
 ### Non-monotonic counter for messages
 For knowing if a message is new or old we attach a non-monotonic counter to every message. It is a uint64, so in theory our elevator system will outlive the sun if we send messages every 10ms.
+
+### Peers 
+We can use the peers network module by having the reciever channel in the main for-select and removing/adding nodes in the ElevatorSystem struct depending on peers.
+
+### MVP for distributed system:
+Have *n* elevators where instead of executing order, we print out when we have acknowledged the order and decided who shold execute it (basically HRA)
+
+### CAB sync/consensus
+We have to have consensus on cabs, same as hall requests because of the spec about not loosing orders.
+

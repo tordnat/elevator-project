@@ -28,7 +28,8 @@ type LocalElevatorState struct {
 type HallRequestsType [][]int
 
 type ElevatorSystem struct {
-	HallRequests   HallRequestsType
+	HallRequests   [][]int
+
 	ElevatorStates map[string]LocalElevatorState
 }
 
@@ -91,7 +92,9 @@ func Encode(system ElevatorSystem) string {
 }
 
 func AssignRequests(elevatorStates string) string {
+	//out, err := exec.Command("./elevatorAlgorithm/hra/hall_request_assigner_macos", "-i", (elevatorStates)).Output() //
 	out, err := exec.Command("./hall_request_assigner", "-i", (elevatorStates)).Output()
+
 	if err != nil {
 		fmt.Println("Error ", err)
 	}
@@ -107,7 +110,8 @@ func Decode(hraString string) OrderAssignments {
 	return result
 }
 
-func hraHallRequestTypeToBool(requests HallRequestsType) [][]bool {
+func hraHallRequestTypeToBool(requests [][]int) [][]bool {
+
 	retArr := make([][]bool, len(requests))
 	for i, row := range requests {
 		retArr[i] = make([]bool, len(row))

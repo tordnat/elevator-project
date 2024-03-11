@@ -22,6 +22,19 @@ const (
 	MD_Stop MotorDirection = 0
 )
 
+func (md MotorDirection) String() string {
+	switch md {
+	case MD_Up:
+		return "Up"
+	case MD_Down:
+		return "Down"
+	case MD_Stop:
+		return "Stop"
+	default:
+		return "Unknown"
+	}
+}
+
 type ButtonType int
 
 const (

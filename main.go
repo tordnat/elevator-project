@@ -1,41 +1,44 @@
 package main
 
 import (
+	"elevator-project/cmd"
+	"elevator-project/requestSync"
 	"elevatorAlgorithm/elevator"
 	"elevatorAlgorithm/fsm"
-	"elevatorAlgorithm/timer"
+	"elevatorAlgorithm/requests"
 	"elevatorDriver/elevio"
+	"fmt"
 	"log"
-	"time"
+	"os"
 )
 
+const bcastPort int = 25565
+
 func main() {
-
+	// elevatorID := "0"
 	log.Println("Elevator starting 🛗")
-	elevio.Init("localhost:15657", elevator.N_FLOORS)
+	elevatorPort, elevatorId := cmd.InitCommandLineArgs(os.Args)
+	elevio.Init(fmt.Sprintf("localhost:%d", elevatorPort), elevator.N_FLOORS)
 
-	if elevio.GetFloor() == -1 {
-		fsm.OnInitBetweenFloors()
-	}
-	timer.Initialize()
 	buttonEvent := make(chan elevio.ButtonEvent)
 	floorEvent := make(chan int)
+	obstructionEvent := make(chan bool)
 	elevio.SetDoorOpenLamp(false)
 	go elevio.PollButtons(buttonEvent)
 	go elevio.PollFloorSensor(floorEvent)
+	go elevio.PollObstructionSwitch(obstructionEvent)
 
-	for {
-		select {
-		case event := <-buttonEvent:
-			log.Println("Button event")
-			fsm.OnRequestButtonPress(event.Floor, event.Button)
-		case event := <-floorEvent:
-			log.Println("Floor event")
-			fsm.OnFloorArrival(event)
-		case <-timer.TimerChan:
-			log.Println("Got timer channel event")
-			fsm.OnDoorTimeOut()
-		}
-		time.Sleep(1 * time.Millisecond)
+	//All channels of FSM go here
+	orderAssignment := make(chan [][]bool)
+	orderCompleted := make(chan requests.ClearFloorOrders)
+	elevStateFromFSM := make(chan elevator.ElevatorState)
+
+	//To not start in an obstructed state
+	for elevio.GetObstruction() {
+		elevio.SetDoorOpenLamp(true)
 	}
+	elevio.SetDoorOpenLamp(false)
+
+	go fsm.FSM(orderAssignment, orderCompleted, floorEvent, obstructionEvent, elevStateFromFSM)
+	requestSync.Sync(elevStateFromFSM, elevatorId, orderAssignment, orderCompleted)
 }
