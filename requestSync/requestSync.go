@@ -5,7 +5,6 @@ import (
 	"elevatorAlgorithm/hra"
 	"elevatorAlgorithm/requests"
 	"elevatorDriver/elevio"
-	"fmt"
 	"log"
 	"networkDriver/bcast"
 	"networkDriver/peers"
@@ -86,7 +85,7 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 		case networkMsg := <-networkReciever: //TODO: Add elevatorSystem
 			if networkMsg.Counter <= msgCounter && len(syncOrderSystem.CabRequests) != 1 && networkMsg.Id == elevatorId { //To only listen to our own message when we are alone
 				msgCounter += 1
-				break
+				continue
 			}
 			elevatorSystems[networkMsg.Id] = networkMsg.ElevatorState
 			msgCounter = networkMsg.Counter
@@ -140,7 +139,7 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 		case <-timer.C: //Timer reset, send new state update
 			msgCounter += 1
 			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncSystemToOrderSystem(elevatorId, syncOrderSystem)}
-			timer.Reset(time.Millisecond * 1000)
+			timer.Reset(time.Millisecond * 500)
 		}
 	}
 }
@@ -164,7 +163,7 @@ func Transition(ourId string, networkMsg StateMsg, syncOrderSystem SyncOrderSyst
 		//log.Println("Transitioned cabs from", networkMsg.Id, "in", ourId)
 		orderSystem.CabRequests[ourId] = TransitionCabRequests(orderSystem.CabRequests[ourId], orderSystem.CabRequests[networkMsg.Id])
 	} else {
-		log.Println("Could not transition cabs. Elevator", networkMsg.Id, "does not have our (", ourId, ") requests. Have they received our state?")
+		log.Println("Could not transition cabs. We did not add elevator", networkMsg.Id, "to syncOrderSystem")
 		//log.Println(networkMsg.OrderSystem.CabRequests)
 	}
 	syncOrderSystem = systemToSyncOrderSystem(ourId, syncOrderSystem, orderSystem)
@@ -345,10 +344,10 @@ func SyncSystemToOrderSystem(ourId string, orderSystem SyncOrderSystem) OrderSys
 			newOrderSystem.HallRequests[i][j] = req[ourId]
 		}
 	}
-
 	for id, cabs := range orderSystem.CabRequests {
+		newOrderSystem.CabRequests[id] = make([]int, 4) //TODO do not hard code numbers
 		for i, req := range cabs {
-			newOrderSystem.CabRequests[ourId][i] = req[id]
+			newOrderSystem.CabRequests[id][i] = req[id]
 		}
 	}
 
@@ -392,8 +391,6 @@ func SyncOrderSystemToElevatorSystem(elevatorSystems map[string]ElevatorState, o
 
 // These are very similar to the hraHallRequestTypeToBool and hraCabRequestTypeToBool. Consider merging them and passing modifier function
 func TransitionCabRequests(internalRequests []int, networkRequests []int) []int {
-	fmt.Println(internalRequests)
-	fmt.Println(networkRequests)
 	for i, req := range internalRequests {
 		internalRequests[i] = TransitionOrder(req, networkRequests[i])
 	}
