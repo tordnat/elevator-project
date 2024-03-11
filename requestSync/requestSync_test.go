@@ -70,49 +70,52 @@ func TestTransitionOrder(t *testing.T) {
 
 func TestConsensusBarrier(t *testing.T) {
 	//Test consensus. These should be improved to check entire state, not just single orders
-
-	orderSys := requestSync.NewSyncOrderSystem("0")
+	localId := "0"
+	elev1id := "1"
+	elev2id := "2"
+	orderSys := requestSync.NewSyncOrderSystem(localId)
 	//Set floor zero cab req to unknown
-	orderSys.CabRequests["0"][0]["0"] = unconfirmedOrder
-	orderSysAfterTrans := requestSync.ConsensusBarrierTransition("0", orderSys)
-	if orderSysAfterTrans.CabRequests["0"][0]["0"] != confirmedOrder {
+	orderSys.CabRequests[localId][0][localId] = unconfirmedOrder
+	orderSysAfterTrans := requestSync.ConsensusBarrierTransition(localId, orderSys)
+	if orderSysAfterTrans.CabRequests[localId][0][localId] != confirmedOrder {
 		t.Error("Failed assert, did not barrier transition cab correct")
 	}
-	if orderSysAfterTrans.CabRequests["0"][1]["0"] != unknownOrder {
-		t.Error("Failed assert, transitioned unknown order to", orderSysAfterTrans.CabRequests["0"][1]["0"])
+	if orderSysAfterTrans.CabRequests[localId][1][localId] != unknownOrder {
+		t.Error("Failed assert, transitioned unknown order to", orderSysAfterTrans.CabRequests[localId][1][localId])
 	}
 
-	orderSys = requestSync.NewSyncOrderSystem("0")
+	orderSys = requestSync.NewSyncOrderSystem(localId)
 	//Set floor zero cab req to unknown
-	orderSys.CabRequests["0"][0]["0"] = confirmedOrder
-	orderSysAfterTrans = requestSync.ConsensusBarrierTransition("0", orderSys)
+	orderSys.CabRequests[localId][0][localId] = confirmedOrder
+	orderSysAfterTrans = requestSync.ConsensusBarrierTransition(localId, orderSys)
 	if orderSysAfterTrans.CabRequests["0"][0]["0"] != confirmedOrder {
 		t.Error("Failed assert, transitioned when we should have stayed")
 	}
 
-	orderSys = requestSync.NewSyncOrderSystem("0")
+	orderSys = requestSync.NewSyncOrderSystem(localId)
 	//Set floor zero cab req to unknown
-	orderSys.CabRequests["0"][0]["0"] = confirmedOrder
+	orderSys.CabRequests[localId][0][localId] = confirmedOrder
 
 	elevatorSystem := requestSync.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop}
-	networkMsg := requestSync.StateMsg{"0", 2, elevatorSystem, requestSync.SyncOrderSystemToOrderSystem("0", orderSys)}
-
-	orderSysAfterTrans = requestSync.Transition("0", networkMsg, orderSys)
-	if orderSysAfterTrans.CabRequests["0"][0]["0"] != confirmedOrder {
+	networkMsg := requestSync.StateMsg{localId, 2, elevatorSystem, requestSync.SyncOrderSystemToOrderSystem(localId, orderSys)}
+	orderSysAfterTrans = requestSync.Transition(localId, networkMsg, orderSys)
+	if orderSysAfterTrans.CabRequests[localId][0][localId] != confirmedOrder {
 		t.Error("Failed assert, transitioned when we should have stayed")
 	}
 
 	// Test order completion
 	orderSys = requestSync.NewSyncOrderSystem("0")
-	orderSys.CabRequests["0"][0]["0"] = servicedOrder
-	orderSys.CabRequests["0"][0]["1"] = servicedOrder
+	orderSys.CabRequests["0"][0][localId] = servicedOrder
+	orderSys.CabRequests["0"][0][elev1id] = servicedOrder
+	orderSys.CabRequests["0"][0][elev2id] = servicedOrder
 
-	orderSys.HallRequests[0][0]["0"] = servicedOrder
-	orderSys.HallRequests[0][0]["1"] = servicedOrder
+	orderSys.HallRequests[0][0][localId] = servicedOrder
+	orderSys.HallRequests[0][0][elev1id] = servicedOrder
+	orderSys.HallRequests[0][0][elev2id] = servicedOrder
 
 	orderSysAfterTrans = requestSync.ConsensusBarrierTransition("0", orderSys)
 	if orderSysAfterTrans.CabRequests["0"][0]["0"] != noOrder {
-		t.Error("Cab order should be completed after transitioning got: ", orderSysAfterTrans.CabRequests["1"][0]["0"])
+		t.Error("Cab order should be completed after transitioning got: ", orderSysAfterTrans.CabRequests["0"][0]["0"])
 	}
 	if orderSysAfterTrans.HallRequests[0][0]["0"] != noOrder {
 		t.Error("Hall order should be completed after transitioning, got: ", orderSysAfterTrans.HallRequests[0][0]["0"])
@@ -132,13 +135,14 @@ func TestConsensusBarrier(t *testing.T) {
 	}
 	//Test SystemToSyncOrderSystem
 	syncOrderSys := requestSync.NewSyncOrderSystem("0")
-	syncOrderSys.HallRequests[0][0]["0"] = unconfirmedOrder
-	syncOrderSys.HallRequests[0][0]["1"] = unconfirmedOrder
-	normalOrderSys := requestSync.SyncOrderSystemToOrderSystem("0", syncOrderSys)
+	syncOrderSys.HallRequests[0][0][localId] = unconfirmedOrder
+	syncOrderSys.HallRequests[0][0][elev1id] = unconfirmedOrder
+	syncOrderSys.HallRequests[0][0][elev2id] = unconfirmedOrder
+	normalOrderSys := requestSync.SyncOrderSystemToOrderSystem(localId, syncOrderSys)
 
-	//Both have unknown here
-	newSys := requestSync.SystemToSyncOrderSystem("0", syncOrderSys, normalOrderSys)
-	if newSys.HallRequests[0][0]["0"] != unconfirmedOrder && newSys.HallRequests[0][0]["1"] != unconfirmedOrder {
+	//All have unknown here
+	newSys := requestSync.SystemToSyncOrderSystem(localId, syncOrderSys, normalOrderSys)
+	if newSys.HallRequests[0][0][localId] != unconfirmedOrder && newSys.HallRequests[0][0][elev1id] != unconfirmedOrder && newSys.HallRequests[0][0][elev2id] != unconfirmedOrder {
 		t.Error("Not unconfirmed")
 	}
 }

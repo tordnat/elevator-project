@@ -77,14 +77,14 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 
 	syncOrderSystem := NewSyncOrderSystem(elevatorId)
 
+	var activePeers []string
+
 	for {
 		select {
 		case btn := <-btnEvent: //Got order
 			syncOrderSystem = AddOrder(elevatorId, syncOrderSystem, btn)
 			msgCounter += 1 //To prevent forgetting counter, this should perhaps be in a seperate function
-			log.Println("Tried to add order", btn)
-			log.Println("Current orderSys", SyncOrderSystemToOrderSystem(elevatorId, syncOrderSystem).CabRequests)
-			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncOrderSystemToOrderSystem(elevatorId, syncOrderSystem)} //
+			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncOrderSystemToOrderSystem(elevatorId, syncOrderSystem)}
 
 		case networkMsg := <-networkReciever: //TODO: Add elevatorSystem
 			if networkMsg.Counter <= msgCounter && len(syncOrderSystem.CabRequests) != 1 && networkMsg.Id == elevatorId { //To only listen to our own message when we are alone
@@ -99,25 +99,33 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 				log.Println("Elevator floor is -1, will not send to hra")
 				continue //Should this be a break?
 			}
-
-			hraOutput := hra.Decode(hra.AssignRequests(hra.Encode(SyncOrderSystemToElevatorSystem(elevatorSystems, elevatorId, syncOrderSystem))))[elevatorId]
+			elevatorSystem := SyncOrderSystemToElevatorSystem(elevatorSystems, elevatorId, syncOrderSystem)
+			updateHallLights(elevatorSystem.HallRequests)
+			updateCabLights(elevatorSystem.ElevatorStates[elevatorId].CabRequests)
+			hraOutput := hra.Decode(hra.AssignRequests(hra.Encode(elevatorSystem)))[elevatorId]
 			if len(hraOutput) > 0 {
-				orderAssignment <- hraOutput
+				select {
+				case orderAssignment <- hraOutput:
+				default:
+					log.Println("No message sent")
+				}
 			} else {
 				log.Println("Hra output empty, input to hra:", SyncOrderSystemToElevatorSystem(elevatorSystems, elevatorId, syncOrderSystem))
 			}
 
-		case peersUpdate := <-peersReciever:
+		case peersUpdate := <-peersReciever: //This should edit syncOrderSystem or we need to pass around peerList
 			if len(peersUpdate.Peers) == 0 {
 				//Set to unknown
 				log.Println("Reset to unknown")
 				syncOrderSystem = NewSyncOrderSystem(elevatorId)
 			}
-
+			activePeers = peersUpdate.Peers
+			syncOrderSystem = updateSyncOrderSystemFromPeerList(elevatorId, activePeers, syncOrderSystem)
 			updatedElevatorSystems := make(map[string]ElevatorState)
-			for _, peers := range peersUpdate.Peers {
+			for _, peers := range activePeers {
 				updatedElevatorSystems[peers] = elevatorSystems[peers]
 			}
+
 			elevatorSystems = updatedElevatorSystems
 		case elevator := <-elevatorSystemFromFSM:
 			var tmpElevator ElevatorState
@@ -127,24 +135,49 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 			elevatorSystems[elevatorId] = tmpElevator
 
 		case orderToClear := <-orderCompleted:
-			//Transmit to network that we want to clear
-			//Bascially run a transition on our elevator system after having assigned the order as completed
-			if orderToClear.Cab {
-				syncOrderSystem.CabRequests[elevatorId][orderToClear.Floor][elevatorId] = TransitionOrder(syncOrderSystem.CabRequests[elevatorId][orderToClear.Floor][elevatorId], servicedOrder)
-			}
-			if orderToClear.HallUp {
-				syncOrderSystem.HallRequests[orderToClear.Floor][0][elevatorId] = TransitionOrder(syncOrderSystem.HallRequests[orderToClear.Floor][0][elevatorId], servicedOrder)
-			}
-			if orderToClear.HallDown {
-				syncOrderSystem.HallRequests[orderToClear.Floor][1][elevatorId] = TransitionOrder(syncOrderSystem.HallRequests[orderToClear.Floor][1][elevatorId], servicedOrder)
-			}
+			syncOrderSystem = RemoveOrder(elevatorId, orderToClear, syncOrderSystem)
 
 		case <-timer.C: //Timer reset, send new state update
 			msgCounter += 1
 			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncOrderSystemToOrderSystem(elevatorId, syncOrderSystem)}
-			timer.Reset(time.Millisecond * 500)
+			timer.Reset(time.Millisecond * 50)
 		}
 	}
+}
+
+func updateSyncOrderSystemFromPeerList(localId string, peers []string, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
+	updatedSyncOrderSystem := NewSyncOrderSystem(localId)
+	elevatorIds := append(peers, localId)
+	for i, floor := range syncOrderSystem.HallRequests {
+		for j, req := range floor {
+			for id, order := range req {
+				if contains(elevatorIds, id) {
+					updatedSyncOrderSystem.HallRequests[i][j][id] = order
+				}
+			}
+		}
+	}
+	for cabId, cabs := range syncOrderSystem.CabRequests {
+		updatedSyncOrderSystem.CabRequests[cabId] = make([]SyncOrder, 4) //TODO do not hard code numbers
+		for i, req := range cabs {
+			for id, order := range req {
+				if contains(elevatorIds, id) {
+					updatedSyncOrderSystem.CabRequests[cabId][i] = make(SyncOrder)
+					updatedSyncOrderSystem.CabRequests[cabId][i][id] = order
+				}
+			}
+		}
+	}
+	return updatedSyncOrderSystem
+}
+
+func contains(slice []string, str string) bool {
+	for _, item := range slice {
+		if item == str {
+			return true
+		}
+	}
+	return false
 }
 
 func AddOrder(localId string, syncOrderSystem SyncOrderSystem, btn elevio.ButtonEvent) SyncOrderSystem {
@@ -152,6 +185,18 @@ func AddOrder(localId string, syncOrderSystem SyncOrderSystem, btn elevio.Button
 		syncOrderSystem.CabRequests[localId][btn.Floor][localId] = TransitionOrder(syncOrderSystem.CabRequests[localId][btn.Floor][localId], unconfirmedOrder)
 	} else {
 		syncOrderSystem.HallRequests[btn.Floor][btn.Button][localId] = TransitionOrder(syncOrderSystem.HallRequests[btn.Floor][btn.Button][localId], unconfirmedOrder)
+	}
+	return syncOrderSystem
+}
+func RemoveOrder(localId string, orderToClear requests.ClearFloorOrders, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
+	if orderToClear.Cab {
+		syncOrderSystem.CabRequests[localId][orderToClear.Floor][localId] = TransitionOrder(syncOrderSystem.CabRequests[localId][orderToClear.Floor][localId], servicedOrder)
+	}
+	if orderToClear.HallUp {
+		syncOrderSystem.HallRequests[orderToClear.Floor][0][localId] = TransitionOrder(syncOrderSystem.HallRequests[orderToClear.Floor][0][localId], servicedOrder)
+	}
+	if orderToClear.HallDown {
+		syncOrderSystem.HallRequests[orderToClear.Floor][1][localId] = TransitionOrder(syncOrderSystem.HallRequests[orderToClear.Floor][1][localId], servicedOrder)
 	}
 	return syncOrderSystem
 }
@@ -196,7 +241,6 @@ func AddElevatorToSyncOrderSystem(localId string, networkMsg StateMsg, syncOrder
 		syncOrderSystem.CabRequests[networkMsg.Id][floor] = make(SyncOrder)
 		syncOrderSystem.CabRequests[networkMsg.Id][floor][localId] = req //This only adds
 	}
-	log.Println("Added elev", networkMsg.Id, "to syncSys:", syncOrderSystem.CabRequests) // In wrong place?
 	return syncOrderSystem
 }
 
@@ -275,8 +319,8 @@ func NewSyncOrderSystem(initialKey string) SyncOrderSystem {
 	initMap = make(map[string]int)
 	initMap[initialKey] = unknownOrder // Init with unknown to just join NW
 	hallRequests := [][]SyncOrder{{initMap, initMap}, {initMap, initMap}, {initMap, initMap}, {initMap, initMap}}
-	for i := 0; i < 4; i++ {
-		for j := 0; j < 2; j++ {
+	for i := 0; i < 4; i++ { // Hard coded values FIX
+		for j := 0; j < 2; j++ { // Hard coded values FIX
 			initMap = make(map[string]int)
 			initMap[initialKey] = unknownOrder // Init with unknown to just join NW
 			hallRequests[i][j] = map[string]int{initialKey: unknownOrder}
@@ -387,7 +431,7 @@ func SyncOrderSystemToElevatorSystem(elevatorSystems map[string]ElevatorState, l
 		}
 	}
 	//Loop through all IDs and add elevatorsystem pr id
-	for id, _ := range OrderSystem.CabRequests {
+	for id := range OrderSystem.CabRequests {
 		hraElevSys.ElevatorStates[id] = GenerateLocalElev(elevatorSystems[id], id, OrderSystem)
 	}
 
@@ -425,5 +469,19 @@ func ReqToString(req int) string {
 		return "serviced order"
 	default:
 		return "Invalid"
+	}
+}
+
+func updateHallLights(hall_orders [][]int) {
+	for floor, floorRow := range hall_orders {
+		for btn, order := range floorRow {
+			elevio.SetButtonLamp(elevio.ButtonType(btn), floor, (order == confirmedOrder))
+		}
+	}
+}
+
+func updateCabLights(cab_orders []int) {
+	for floor, order := range cab_orders {
+		elevio.SetButtonLamp(elevio.BT_Cab, floor, (order == confirmedOrder))
 	}
 }
