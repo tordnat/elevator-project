@@ -95,7 +95,7 @@ func TestConsensusBarrier(t *testing.T) {
 	orderSys.CabRequests["0"][0]["0"] = confirmedOrder
 
 	elevatorSystem := requestSync.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop}
-	networkMsg := requestSync.StateMsg{"0", 2, elevatorSystem, requestSync.SyncSystemToOrderSystem("0", orderSys)}
+	networkMsg := requestSync.StateMsg{"0", 2, elevatorSystem, requestSync.SyncOrderSystemToOrderSystem("0", orderSys)}
 
 	orderSysAfterTrans = requestSync.Transition("0", networkMsg, orderSys)
 	if orderSysAfterTrans.CabRequests["0"][0]["0"] != confirmedOrder {
@@ -130,7 +130,17 @@ func TestConsensusBarrier(t *testing.T) {
 	if orderSysAfterTrans.CabRequests["0"][1]["0"] != unknownOrder {
 		t.Error("Unknown cab got transtitioned")
 	}
+	//Test SystemToSyncOrderSystem
+	syncOrderSys := requestSync.NewSyncOrderSystem("0")
+	syncOrderSys.HallRequests[0][0]["0"] = unconfirmedOrder
+	syncOrderSys.HallRequests[0][0]["1"] = unconfirmedOrder
+	normalOrderSys := requestSync.SyncOrderSystemToOrderSystem("0", syncOrderSys)
 
+	//Both have unknown here
+	newSys := requestSync.SystemToSyncOrderSystem("0", syncOrderSys, normalOrderSys)
+	if newSys.HallRequests[0][0]["0"] != unconfirmedOrder && newSys.HallRequests[0][0]["1"] != unconfirmedOrder {
+		t.Error("Not unconfirmed")
+	}
 }
 
 func TestAddElevatorToSyncOrderSystem(t *testing.T) {
