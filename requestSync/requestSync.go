@@ -32,6 +32,7 @@ const (
 	confirmedOrder
 	servicedOrder
 )
+
 const bcastPort int = 25565
 const peersPort int = 25566
 
@@ -46,6 +47,7 @@ type OrderSystem struct {
 	CabRequests  map[string][]int
 }
 
+// Shit name: elevatorId is ambiguous, who's ID? Ours? Network? Local?
 func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, orderAssignment chan [][]bool, orderCompleted chan requests.ClearFloorOrders) {
 	btnEvent := make(chan elevio.ButtonEvent)
 	networkReciever := make(chan StateMsg)
@@ -155,7 +157,7 @@ func AddOrder(ourId string, syncOrderSystem SyncOrderSystem, btn elevio.ButtonEv
 }
 
 func Transition(ourId string, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
-	syncOrderSystem = AddElevatorToSyncOrderSystem(ourId, networkMsg, syncOrderSystem)
+	syncOrderSystem = AddElevatorToSyncOrderSystem(ourId, networkMsg, syncOrderSystem) // syncOrderSystem is now updated, consider naming to something like updatedSyncOrderSystem
 	orderSystem := SyncSystemToOrderSystem(ourId, syncOrderSystem)
 	orderSystem.HallRequests = TransitionHallRequests(orderSystem.HallRequests, networkMsg.OrderSystem.HallRequests)
 
@@ -174,12 +176,12 @@ func Transition(ourId string, networkMsg StateMsg, syncOrderSystem SyncOrderSyst
 
 // TODO: Add unit tests for this functon.
 func AddElevatorToSyncOrderSystem(ourId string, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
-	//Update our records of the view networkElevator of our cabs
-	for floor, networkRequest := range networkMsg.OrderSystem.CabRequests[ourId] {
+	//Update our records of the view networkElevator has of our cabs
+	for floor, networkRequest := range networkMsg.OrderSystem.CabRequests[ourId] { // This is really fucking confusing 😕
 		syncOrderSystem.CabRequests[ourId][floor][networkMsg.Id] = networkRequest
 	}
 	//Update our records of the view networkElevator has of halls
-	for floor, row := range networkMsg.OrderSystem.HallRequests {
+	for floor, row := range networkMsg.OrderSystem.HallRequests { // row is a bad name since we iterate over floors, not rows. Which row is your office at? Idk nerd, Use floors.
 		for btn, networkRequest := range row {
 			syncOrderSystem.HallRequests[floor][btn][networkMsg.Id] = networkRequest
 		}
@@ -196,11 +198,11 @@ func AddElevatorToSyncOrderSystem(ourId string, networkMsg StateMsg, syncOrderSy
 		syncOrderSystem.CabRequests[networkMsg.Id][floor] = make(SyncOrder)
 		syncOrderSystem.CabRequests[networkMsg.Id][floor][ourId] = req //This only adds
 	}
-	log.Println("Added elev", networkMsg.Id, "to syncSys:", syncOrderSystem.CabRequests)
+	log.Println("Added elev", networkMsg.Id, "to syncSys:", syncOrderSystem.CabRequests) // In wrong place?
 	return syncOrderSystem
 }
 
-func TransitionOrder(currentOrder int, newOrder int) int {
+func TransitionOrder(currentOrder int, newOrder int) int { // new order is the wrong name here, it might not be new. Gives wrong sense of safety
 	if currentOrder == unknownOrder { //Catch up if we just joined
 		return newOrder
 	}
@@ -326,6 +328,7 @@ func AllValuesEqual(m map[string]int) bool {
 	return true
 }
 
+// This NEEDS to be renamed, ambiguous with (i)
 func systemToSyncOrderSystem(ourId string, syncOrderSystem SyncOrderSystem, orderSystem OrderSystem) SyncOrderSystem {
 	for i, floor := range orderSystem.HallRequests {
 		for j, req := range floor {
@@ -341,6 +344,7 @@ func systemToSyncOrderSystem(ourId string, syncOrderSystem SyncOrderSystem, orde
 	return syncOrderSystem
 }
 
+// (i) This is ambiguous, too similar to other function
 func SyncSystemToOrderSystem(ourId string, syncOrderSystem SyncOrderSystem) OrderSystem {
 	var newOrderSystem OrderSystem = newOrderSystem(ourId)
 
