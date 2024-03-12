@@ -37,6 +37,9 @@ func main() {
 	for elevio.GetObstruction() {
 		elevio.SetDoorOpenLamp(true)
 	}
+	elevio.MotorDirection(elevio.MD_Down)
+	for elevio.GetFloor() == -1 {
+	}
 	elevio.SetDoorOpenLamp(false)
 
 	go fsm.FSM(orderAssignment, orderCompleted, floorEvent, obstructionEvent, elevStateFromFSM)
