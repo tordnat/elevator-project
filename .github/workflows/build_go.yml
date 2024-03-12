@@ -35,6 +35,6 @@ jobs:
 
     - name: Test
       run: |
-        chmod +x ./elevatorAlgorithm/hra/hall_request_assigner
+        chmod 777 ./elevatorAlgorithm/hra/hall_request_assigner
         go test -v elevatorAlgorithm/hra
         go test -v requestSync/requestSync_test.go
