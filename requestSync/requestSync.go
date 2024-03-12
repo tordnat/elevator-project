@@ -76,17 +76,17 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 	elevatorSystems[elevatorId] = tmpElevator
 
 	syncOrderSystem := NewSyncOrderSystem(elevatorId)
-
+	log.Println(syncOrderSystem)
 	var activePeers []string
 
 	for {
 		select {
-		case btn := <-btnEvent: //Got order
+		case btn := <-btnEvent:
 			syncOrderSystem = AddOrder(elevatorId, syncOrderSystem, btn)
 			msgCounter += 1 //To prevent forgetting counter, this should perhaps be in a seperate function
 			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncOrderSystemToOrderSystem(elevatorId, syncOrderSystem)}
 
-		case networkMsg := <-networkReciever: //TODO: Add elevatorSystem
+		case networkMsg := <-networkReciever:
 			if networkMsg.Counter <= msgCounter && len(activePeers) != 1 && networkMsg.Id == elevatorId { //To only listen to our own message when we are alone
 				msgCounter += 1
 				break
@@ -113,12 +113,7 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 				log.Println("Hra output empty, input to hra (There could be invalid peers which are not sent here):", SyncOrderSystemToElevatorSystem(elevatorSystems, elevatorId, syncOrderSystem, activePeers))
 			}
 
-		case peersUpdate := <-peersReciever: //This should edit syncOrderSystem or we need to pass around peerList
-			//if len(peersUpdate.Peers) == 1 {
-			//Set to unknown
-			//	log.Println("Reset to unknown")
-			//	syncOrderSystem = NewSyncOrderSystem(elevatorId)
-			//}
+		case peersUpdate := <-peersReciever:
 			activePeers = peersUpdate.Peers
 			log.Println("Peers:", peersUpdate.Peers, "Elevsys:", len(elevatorSystems), "syncOrderSystem cabs num:", len(syncOrderSystem.CabRequests), "syncOrderSys specific orders: ", len(syncOrderSystem.CabRequests[elevatorId][0]))
 		case elevator := <-elevatorSystemFromFSM:
@@ -250,7 +245,6 @@ func ConsensusTransitionSingleCab(localId string, cabRequests map[string][]SyncO
 }
 
 func ConsensusTransitionSingleHall(localId string, hallRequests [][]SyncOrder, peers []string) (int, int, int) { // (int, int ,int) is not clear, should have order type instead
-	log.Println("Ran consensus for halls")
 	for reqFloor, row := range hallRequests {
 		for reqBtn, req := range row {
 			if AllPeersHaveSameValue(req, peers) {
@@ -258,9 +252,6 @@ func ConsensusTransitionSingleHall(localId string, hallRequests [][]SyncOrder, p
 				if ourRequest == servicedOrder {
 					return reqFloor, reqBtn, noOrder
 				} else if ourRequest == unconfirmedOrder {
-					if reqFloor == 0 {
-						log.Println("All peers had confirmedOrder on floor 0")
-					}
 					return reqFloor, reqBtn, confirmedOrder
 				}
 			}
@@ -290,25 +281,21 @@ func AllPeersHaveSameValue(order SyncOrder, peers []string) bool {
 	return true
 }
 
-func NewSyncOrderSystem(initialKey string) SyncOrderSystem {
-	// Initialize HallRequests with fixed sizes.
-	initMap := make(SyncOrder)
-	initMap[initialKey] = unknownOrder // Init with unknown to just join NW
-	hallRequests := [][]SyncOrder{{initMap, initMap}, {initMap, initMap}, {initMap, initMap}, {initMap, initMap}}
-	for i := 0; i < 4; i++ { // Hard coded values FIX
-		for j := 0; j < 2; j++ { // Hard coded values FIX
-			initMap = make(map[string]int)
-			initMap[initialKey] = unknownOrder // Init with unknown to just join NW
-			hallRequests[i][j] = map[string]int{initialKey: unknownOrder}
+func NewSyncOrderSystem(id string) SyncOrderSystem {
+	hallRequests := make([][]SyncOrder, elevator.N_FLOORS)
+	for i := 0; i < elevator.N_FLOORS; i++ {
+		hallRequests[i] = make([]SyncOrder, elevator.N_HALL_BUTTONS)
+		for j := 0; j < elevator.N_HALL_BUTTONS; j++ {
+			initMap := make(SyncOrder)
+			initMap[id] = unknownOrder // Init with unknown to just join network
+			hallRequests[i][j] = map[string]int{id: unknownOrder}
 		}
 	}
 
-	// Initialize CabRequests with 4 SyncOrder elements for each key.
-	cabRequests := map[string][]SyncOrder{initialKey: {initMap, initMap, initMap, initMap}}
-	for i := 0; i < 4; i++ { //Fix
-		initMap = make(map[string]int)
-		initMap[initialKey] = unknownOrder // Init with unknown to just join NW
-		cabRequests[initialKey][i] = initMap
+	cabRequests := make(map[string][]SyncOrder)
+	cabRequests[id] = make([]SyncOrder, elevator.N_FLOORS)
+	for i := 0; i < elevator.N_FLOORS; i++ { //Fix
+		cabRequests[id][i] = SyncOrder{id: unknownOrder}
 	}
 	return SyncOrderSystem{
 		HallRequests: hallRequests,
@@ -317,14 +304,19 @@ func NewSyncOrderSystem(initialKey string) SyncOrderSystem {
 }
 
 func newOrderSystem(id string) OrderSystem {
+	hallRequests := make([][]int, elevator.N_FLOORS)
+	for i := 0; i < elevator.N_FLOORS; i++ {
+		hallRequests[i] = make([]int, elevator.N_HALL_BUTTONS)
+	}
+
 	cabRequests := make(map[string][]int)
-	cabRequests[id] = make([]int, 4) //Fix
-	for i := 0; i < 4; i++ {         //Fix
+	cabRequests[id] = make([]int, elevator.N_FLOORS)
+	for i := 0; i < elevator.N_FLOORS; i++ {
 		cabRequests[id][i] = unknownOrder
 	}
 
 	return OrderSystem{
-		HallRequests: [][]int{{unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}},
+		HallRequests: hallRequests,
 		CabRequests:  cabRequests,
 	}
 }
@@ -352,7 +344,7 @@ func SyncOrderSystemToOrderSystem(localId string, syncOrderSystem SyncOrderSyste
 		}
 	}
 	for id, cabs := range syncOrderSystem.CabRequests {
-		newOrderSystem.CabRequests[id] = make([]int, 4) //TODO do not hard code numbers
+		newOrderSystem.CabRequests[id] = make([]int, elevator.N_FLOORS)
 		for i, req := range cabs {
 			newOrderSystem.CabRequests[id][i] = req[localId] //This is dangrous but needed. See comments in AddElevatorToSyncOrderSystem. This could be the only place where we access SyncOrderSystem, but only care about ourself (e.g we could use orderSystem all other places)
 		}
@@ -414,6 +406,7 @@ func TransitionHallRequests(internalRequests [][]int, networkRequests [][]int) [
 	return internalRequests
 }
 
+// Move these?
 func updateHallLights(hall_orders [][]int) {
 	for floor, floorRow := range hall_orders {
 		for btn, order := range floorRow {
