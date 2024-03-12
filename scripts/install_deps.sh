@@ -9,5 +9,5 @@ sudo chmod +x Project-resources/cost_fns/hall_request_assigner/build.sh
 cd Project-resources/cost_fns/hall_request_assigner/
 ./build.sh
 cd $WORKING_DIR
-sudo mv Project-resources/cost_fns/hall_request_assigner $HRA_INSTALL_PATH/
-sudo chmod 777 $HRA_INSTALL_PATH/hall_request_assigner
+sudo mv Project-resources/cost_fns/hall_request_assigner/hall_request_assigner $HRA_INSTALL_PATH
+sudo chmod +x $HRA_INSTALL_PATH/hall_request_assigner
