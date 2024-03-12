@@ -8,7 +8,7 @@ const N_FLOORS = 4
 const N_BUTTONS = 3
 const N_HALL_BUTTONS = 2
 const DOOR_OPEN_DURATION_S = 2
-
+const DOOR_OBSTRUCTION_TIMEOUT = 7
 type ElevatorBehaviour int
 
 const (
