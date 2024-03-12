@@ -17,8 +17,9 @@ Snippets:
 `sudo apt install golang`
 `sudo apt install dmd`
 
-You can also use the installation script in the `scripts/` folder in the root directory of this repository:
+To build and install the `hall_request_assigner` run the following commands:
 `chmod +x scripts/install_deps.sh`
+`./scripts/install_deps.sh`
 
 > Note: If DMD is not in apt sources, visit https://dlang.org/download.html for dmd download
 
