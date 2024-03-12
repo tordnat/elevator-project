@@ -7,6 +7,6 @@ WORKING_DIR=$(pwd)
 
 sudo chmod +x Project-resources/cost_fns/hall_request_assigner/build.sh
 cd Project-resources/cost_fns/hall_request_assigner/
-build.sh
+./build.sh
 cd $WORKING_DIR
 sudo cp Project-resources/cost_fns/hall_request_assigner $HRA_INSTALL_PATH
