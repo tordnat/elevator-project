@@ -21,7 +21,11 @@ jobs:
 
     - name: Set up Dlang deps
       uses: dlang-community/setup-dlang@v1
-          
+
+    - name: Compile and install hall_request_assigner
+      run: |
+        scripts/install_deps.sh
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
@@ -30,9 +34,7 @@ jobs:
     - name: Build
       run: go build -v ./...
 
-    - name: Compile HRA and test program
+    - name: Test
       run: |
-        scripts/install_deps.sh
-        chmod +x ./elevatorAlgorithm/hra/hall_request_assigner
         go test -v elevatorAlgorithm/hra
         go test -v requestSync/requestSync_test.go
