@@ -26,6 +26,7 @@ jobs:
       run: |
         scripts/install_deps.sh
         chmod +x ./elevatorAlgorithm/hra/hall_request_assigner
+        chmod +x ./hall_request_assigner
       
     - name: Set up Go
       uses: actions/setup-go@v5
