@@ -1,6 +1,6 @@
 #!/bin/bash
 
-HRA_INSTALL_PATH="elevatorAlgorithm/hra/"
+HRA_INSTALL_PATH="."
 echo "Building project and moving hall_request_assigner to $HRA_INSTALL_PATH"
 
 WORKING_DIR=$(pwd)
