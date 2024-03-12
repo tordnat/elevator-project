@@ -15,12 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - uses: dlang-community/setup-dlang@v1
 
-    - name: Compile hall_request_assigner
-      uses: dlang-community/setup-dlang@v1
-      with:
-        compiler: dmd
-      run: scripts/install_deps.sh
+    - name: Compile and set up hall_request_assigner
+      run: script/install_deps.sh
       
     - name: Set up Go
       uses: actions/setup-go@v5
