@@ -21,6 +21,7 @@ To build and install the `hall_request_assigner` run the following commands:
 `chmod +x scripts/install_deps.sh`
 `./scripts/install_deps.sh`
 
+
 > Note: If DMD is not in apt sources, visit https://dlang.org/download.html for dmd download
 
 ## Deployment
