@@ -140,7 +140,7 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 		case <-timer.C: //Timer reset, send new state update
 			msgCounter += 1
 			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncOrderSystemToOrderSystem(elevatorId, syncOrderSystem)}
-			timer.Reset(time.Millisecond * 50)
+			timer.Reset(time.Millisecond * 10)
 		}
 	}
 }
