@@ -2,6 +2,10 @@
 
 Elevator project for Real-time Programming TTK4145 at NTNU. This a distributed program which is designed to handle multiple elevators on a network concurrently in a fail-safe manner. 
 
+## Cloning the repository
+Since we have git submodules you need to clone the repository recursively:
+`git clone --recursive link.to.repo.git `
+
 ## Dependencies
 
 This project requires the following dependencies to be installed on the host machine:
@@ -54,4 +58,4 @@ and then run the elevator program:
 
 `go run main.go --id myid --port myport`
 
-> This is not part of the specification, but is useful for testing
+> This is not part of the deployment, but is useful for testing (we use systemd for resetting our system from fail states)
