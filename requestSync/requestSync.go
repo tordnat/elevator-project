@@ -76,30 +76,30 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 	elevatorSystems[elevatorId] = tmpElevator
 
 	syncOrderSystem := NewSyncOrderSystem(elevatorId)
-
+	log.Println(syncOrderSystem)
 	var activePeers []string
 
 	for {
 		select {
-		case btn := <-btnEvent: //Got order
+		case btn := <-btnEvent:
 			syncOrderSystem = AddOrder(elevatorId, syncOrderSystem, btn)
 			msgCounter += 1 //To prevent forgetting counter, this should perhaps be in a seperate function
 			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncOrderSystemToOrderSystem(elevatorId, syncOrderSystem)}
 
-		case networkMsg := <-networkReciever: //TODO: Add elevatorSystem
-			if networkMsg.Counter <= msgCounter && len(syncOrderSystem.CabRequests) != 1 && networkMsg.Id == elevatorId { //To only listen to our own message when we are alone
+		case networkMsg := <-networkReciever:
+			if networkMsg.Counter <= msgCounter && len(activePeers) != 1 && networkMsg.Id == elevatorId { //To only listen to our own message when we are alone
 				msgCounter += 1
-				continue //Should this be a break?
+				break
 			}
 			elevatorSystems[networkMsg.Id] = networkMsg.ElevatorState
 			msgCounter = networkMsg.Counter
-			syncOrderSystem = Transition(elevatorId, networkMsg, syncOrderSystem)
+			syncOrderSystem = Transition(elevatorId, networkMsg, syncOrderSystem, activePeers)
 
 			if elevatorSystems[elevatorId].Floor == -1 {
 				log.Println("Elevator floor is -1, will not send to hra")
-				continue //Should this be a break?
+				break
 			}
-			elevatorSystem := SyncOrderSystemToElevatorSystem(elevatorSystems, elevatorId, syncOrderSystem)
+			elevatorSystem := SyncOrderSystemToElevatorSystem(elevatorSystems, elevatorId, syncOrderSystem, activePeers)
 			updateHallLights(elevatorSystem.HallRequests)
 			updateCabLights(elevatorSystem.ElevatorStates[elevatorId].CabRequests)
 			hraOutput := hra.Decode(hra.AssignRequests(hra.Encode(elevatorSystem)))[elevatorId]
@@ -110,23 +110,12 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 					log.Println("No message sent")
 				}
 			} else {
-				log.Println("Hra output empty, input to hra:", SyncOrderSystemToElevatorSystem(elevatorSystems, elevatorId, syncOrderSystem))
+				log.Println("Hra output empty, input to hra (There could be invalid peers which are not sent here):", SyncOrderSystemToElevatorSystem(elevatorSystems, elevatorId, syncOrderSystem, activePeers))
 			}
 
-		case peersUpdate := <-peersReciever: //This should edit syncOrderSystem or we need to pass around peerList
-			if len(peersUpdate.Peers) == 0 {
-				//Set to unknown
-				log.Println("Reset to unknown")
-				syncOrderSystem = NewSyncOrderSystem(elevatorId)
-			}
+		case peersUpdate := <-peersReciever:
 			activePeers = peersUpdate.Peers
-			syncOrderSystem = updateSyncOrderSystemFromPeerList(elevatorId, activePeers, syncOrderSystem)
-			updatedElevatorSystems := make(map[string]ElevatorState)
-			for _, peers := range activePeers {
-				updatedElevatorSystems[peers] = elevatorSystems[peers]
-			}
-
-			elevatorSystems = updatedElevatorSystems
+			log.Println("Peers:", peersUpdate.Peers, "Elevsys:", len(elevatorSystems), "syncOrderSystem cabs num:", len(syncOrderSystem.CabRequests), "syncOrderSys specific orders: ", len(syncOrderSystem.CabRequests[elevatorId][0]))
 		case elevator := <-elevatorSystemFromFSM:
 			var tmpElevator ElevatorState
 			tmpElevator.Behaviour = elevator.Behaviour
@@ -140,44 +129,9 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 		case <-timer.C: //Timer reset, send new state update
 			msgCounter += 1
 			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncOrderSystemToOrderSystem(elevatorId, syncOrderSystem)}
-			timer.Reset(time.Millisecond * 10)
+			timer.Reset(time.Millisecond * 1000)
 		}
 	}
-}
-
-func updateSyncOrderSystemFromPeerList(localId string, peers []string, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
-	updatedSyncOrderSystem := NewSyncOrderSystem(localId)
-	elevatorIds := append(peers, localId)
-	for i, floor := range syncOrderSystem.HallRequests {
-		for j, req := range floor {
-			for id, order := range req {
-				if contains(elevatorIds, id) {
-					updatedSyncOrderSystem.HallRequests[i][j][id] = order
-				}
-			}
-		}
-	}
-	for cabId, cabs := range syncOrderSystem.CabRequests {
-		updatedSyncOrderSystem.CabRequests[cabId] = make([]SyncOrder, 4) //TODO do not hard code numbers
-		for i, req := range cabs {
-			for id, order := range req {
-				if contains(elevatorIds, id) {
-					updatedSyncOrderSystem.CabRequests[cabId][i] = make(SyncOrder)
-					updatedSyncOrderSystem.CabRequests[cabId][i][id] = order
-				}
-			}
-		}
-	}
-	return updatedSyncOrderSystem
-}
-
-func contains(slice []string, str string) bool {
-	for _, item := range slice {
-		if item == str {
-			return true
-		}
-	}
-	return false
 }
 
 func AddOrder(localId string, syncOrderSystem SyncOrderSystem, btn elevio.ButtonEvent) SyncOrderSystem {
@@ -201,7 +155,7 @@ func RemoveOrder(localId string, orderToClear requests.ClearFloorOrders, syncOrd
 	return syncOrderSystem
 }
 
-func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem SyncOrderSystem) SyncOrderSystem {
+func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem SyncOrderSystem, peers []string) SyncOrderSystem {
 	updatedSyncOrderSystem = AddElevatorToSyncOrderSystem(localId, networkMsg, updatedSyncOrderSystem)
 
 	orderSystem := SyncOrderSystemToOrderSystem(localId, updatedSyncOrderSystem)
@@ -213,11 +167,12 @@ func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem Sync
 	} else {
 		log.Println("Could not transition cabs. We did not add elevator", networkMsg.Id, "to syncOrderSystem")
 	}
-	updatedSyncOrderSystem = SystemToSyncOrderSystem(localId, updatedSyncOrderSystem, orderSystem)
+	updatedSyncOrderSystem = updateSyncOrderSystem(localId, updatedSyncOrderSystem, orderSystem)
 
-	return ConsensusBarrierTransition(localId, updatedSyncOrderSystem)
+	return ConsensusBarrierTransition(localId, updatedSyncOrderSystem, peers)
 }
 
+// Should not need peer list here, if we got networkMsg, the elevator is in peer list
 func AddElevatorToSyncOrderSystem(localId string, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
 	//Update our records of the view networkElevator has of our cabs
 	for floor, networkRequest := range networkMsg.OrderSystem.CabRequests[localId] {
@@ -261,31 +216,23 @@ func TransitionOrder(currentOrder int, updatedOrder int) int {
 	}
 }
 
-func ConsensusBarrierTransition(localId string, OrderSystem SyncOrderSystem) SyncOrderSystem {
-	//Transition all cabs
-	{
-		floor, newState := ConsensusTransitionSingleCab(localId, OrderSystem.CabRequests)
-		for floor != -1 && newState != -1 { //Can this create nasty edge cases? Maybe have a validation test earlier to check for unknown orders
-			OrderSystem.CabRequests[localId][floor][localId] = newState
-			floor, newState = ConsensusTransitionSingleCab(localId, OrderSystem.CabRequests)
-		}
+func ConsensusBarrierTransition(localId string, OrderSystem SyncOrderSystem, peers []string) SyncOrderSystem {
+	floor, newState := ConsensusTransitionSingleCab(localId, OrderSystem.CabRequests, peers)
+	if floor != -1 && newState != -1 {
+		OrderSystem.CabRequests[localId][floor][localId] = newState
 	}
 
-	//Transition all halls
-	{
-		floor, btn, newState := ConsensusTransitionSingleHall(localId, OrderSystem.HallRequests)
-		for floor != -1 && btn != -1 {
-			OrderSystem.HallRequests[floor][btn][localId] = newState
-			floor, btn, newState = ConsensusTransitionSingleHall(localId, OrderSystem.HallRequests)
-		}
+	floor, btn, newState := ConsensusTransitionSingleHall(localId, OrderSystem.HallRequests, peers)
+	if floor != -1 && btn != -1 {
+		OrderSystem.HallRequests[floor][btn][localId] = newState
 	}
 	return OrderSystem
 }
 
 // Cab and hall are very similar, we should refactor more
-func ConsensusTransitionSingleCab(localId string, cabRequests map[string][]SyncOrder) (int, int) {
+func ConsensusTransitionSingleCab(localId string, cabRequests map[string][]SyncOrder, peers []string) (int, int) {
 	for reqFloor, req := range cabRequests[localId] { //We only check our own cabs for consensus
-		if AllValuesEqual(req) { //Consensus
+		if AllPeersHaveSameValue(req, peers) { //Consensus
 			ourRequest := req[localId]
 			if ourRequest == servicedOrder {
 				return reqFloor, noOrder
@@ -297,10 +244,10 @@ func ConsensusTransitionSingleCab(localId string, cabRequests map[string][]SyncO
 	return -1, -1
 }
 
-func ConsensusTransitionSingleHall(localId string, hallRequests [][]SyncOrder) (int, int, int) { // (int, int ,int) is not clear, should have order type instead
+func ConsensusTransitionSingleHall(localId string, hallRequests [][]SyncOrder, peers []string) (int, int, int) { // (int, int ,int) is not clear, should have order type instead
 	for reqFloor, row := range hallRequests {
 		for reqBtn, req := range row {
-			if AllValuesEqual(req) {
+			if AllPeersHaveSameValue(req, peers) {
 				ourRequest := req[localId]
 				if ourRequest == servicedOrder {
 					return reqFloor, reqBtn, noOrder
@@ -313,51 +260,15 @@ func ConsensusTransitionSingleHall(localId string, hallRequests [][]SyncOrder) (
 	return -1, -1, -1
 }
 
-func NewSyncOrderSystem(initialKey string) SyncOrderSystem {
-	// Initialize HallRequests with fixed sizes.
-	initMap := SyncOrder{}
-	initMap = make(map[string]int)
-	initMap[initialKey] = unknownOrder // Init with unknown to just join NW
-	hallRequests := [][]SyncOrder{{initMap, initMap}, {initMap, initMap}, {initMap, initMap}, {initMap, initMap}}
-	for i := 0; i < 4; i++ { // Hard coded values FIX
-		for j := 0; j < 2; j++ { // Hard coded values FIX
-			initMap = make(map[string]int)
-			initMap[initialKey] = unknownOrder // Init with unknown to just join NW
-			hallRequests[i][j] = map[string]int{initialKey: unknownOrder}
-		}
-	}
-
-	// Initialize CabRequests with 4 SyncOrder elements for each key.
-	cabRequests := map[string][]SyncOrder{initialKey: {initMap, initMap, initMap, initMap}}
-	for i := 0; i < 4; i++ {
-		initMap = make(map[string]int)
-		initMap[initialKey] = unknownOrder // Init with unknown to just join NW
-		cabRequests[initialKey][i] = initMap
-	}
-	return SyncOrderSystem{
-		HallRequests: hallRequests,
-		CabRequests:  cabRequests,
-	}
-}
-
-func newOrderSystem(id string) OrderSystem {
-	cabRequests := make(map[string][]int)
-	cabRequests[id] = make([]int, 4)
-	for i := 0; i < 4; i++ {
-		cabRequests[id][i] = unknownOrder
-	}
-
-	return OrderSystem{
-		HallRequests: [][]int{{unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}},
-		CabRequests:  cabRequests,
-	}
-}
-
-func AllValuesEqual(m map[string]int) bool {
+func AllPeersHaveSameValue(order SyncOrder, peers []string) bool {
 	var firstValue int
 	isFirst := true
 
-	for _, value := range m {
+	for _, peerId := range peers {
+		value, ok := order[peerId]
+		if !ok {
+			return false //If we dont have the order, we dont have consensus
+		}
 		if isFirst {
 			firstValue = value
 			isFirst = false
@@ -370,16 +281,55 @@ func AllValuesEqual(m map[string]int) bool {
 	return true
 }
 
-func SystemToSyncOrderSystem(localId string, syncOrderSystem SyncOrderSystem, orderSystem OrderSystem) SyncOrderSystem {
+func NewSyncOrderSystem(id string) SyncOrderSystem {
+	hallRequests := make([][]SyncOrder, elevator.N_FLOORS)
+	for i := 0; i < elevator.N_FLOORS; i++ {
+		hallRequests[i] = make([]SyncOrder, elevator.N_HALL_BUTTONS)
+		for j := 0; j < elevator.N_HALL_BUTTONS; j++ {
+			initMap := make(SyncOrder)
+			initMap[id] = unknownOrder // Init with unknown to just join network
+			hallRequests[i][j] = map[string]int{id: unknownOrder}
+		}
+	}
+
+	cabRequests := make(map[string][]SyncOrder)
+	cabRequests[id] = make([]SyncOrder, elevator.N_FLOORS)
+	for i := 0; i < elevator.N_FLOORS; i++ { //Fix
+		cabRequests[id][i] = SyncOrder{id: unknownOrder}
+	}
+	return SyncOrderSystem{
+		HallRequests: hallRequests,
+		CabRequests:  cabRequests,
+	}
+}
+
+func newOrderSystem(id string) OrderSystem {
+	hallRequests := make([][]int, elevator.N_FLOORS)
+	for i := 0; i < elevator.N_FLOORS; i++ {
+		hallRequests[i] = make([]int, elevator.N_HALL_BUTTONS)
+	}
+
+	cabRequests := make(map[string][]int)
+	cabRequests[id] = make([]int, elevator.N_FLOORS)
+	for i := 0; i < elevator.N_FLOORS; i++ {
+		cabRequests[id][i] = unknownOrder
+	}
+
+	return OrderSystem{
+		HallRequests: hallRequests,
+		CabRequests:  cabRequests,
+	}
+}
+
+func updateSyncOrderSystem(localId string, syncOrderSystem SyncOrderSystem, orderSystem OrderSystem) SyncOrderSystem {
 	for i, floor := range orderSystem.HallRequests {
 		for j, req := range floor {
 			syncOrderSystem.HallRequests[i][j][localId] = req
 		}
 	}
-	//Should add other cabs aswell here
-	for id, cabs := range syncOrderSystem.CabRequests { //THIS should be checked, should we nto loop through orderSyste here?
-		for i, req := range cabs {
-			syncOrderSystem.CabRequests[id][i][localId] = req[localId]
+	for id, cabs := range syncOrderSystem.CabRequests {
+		for floor, req := range cabs {
+			syncOrderSystem.CabRequests[id][floor][localId] = req[localId]
 		}
 	}
 	return syncOrderSystem
@@ -394,9 +344,9 @@ func SyncOrderSystemToOrderSystem(localId string, syncOrderSystem SyncOrderSyste
 		}
 	}
 	for id, cabs := range syncOrderSystem.CabRequests {
-		newOrderSystem.CabRequests[id] = make([]int, 4) //TODO do not hard code numbers
+		newOrderSystem.CabRequests[id] = make([]int, elevator.N_FLOORS)
 		for i, req := range cabs {
-			newOrderSystem.CabRequests[id][i] = req[localId] //This is dangrous but needed. See comments in AddElevatorToSyncOrderSystem. This could be the only place where we access this state this way.
+			newOrderSystem.CabRequests[id][i] = req[localId] //This is dangrous but needed. See comments in AddElevatorToSyncOrderSystem. This could be the only place where we access SyncOrderSystem, but only care about ourself (e.g we could use orderSystem all other places)
 		}
 	}
 
@@ -418,20 +368,21 @@ func GenerateLocalElev(elevatorSystem ElevatorState, id string, OrderSystem Sync
 	return localElevState
 }
 
-func SyncOrderSystemToElevatorSystem(elevatorSystems map[string]ElevatorState, localId string, OrderSystem SyncOrderSystem) hra.ElevatorSystem {
+func SyncOrderSystemToElevatorSystem(elevatorSystems map[string]ElevatorState, localId string, OrderSystem SyncOrderSystem, peers []string) hra.ElevatorSystem {
 	hraElevSys := hra.ElevatorSystem{
 		HallRequests:   [][]int{{unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}},
 		ElevatorStates: map[string]hra.LocalElevatorState{},
 	}
 
-	//Fill halls
+	//Fill halls. Don't need peers, because we base it on our own id
 	for i, floor := range OrderSystem.HallRequests {
 		for j, req := range floor {
 			hraElevSys.HallRequests[i][j] = req[localId]
 		}
 	}
-	//Loop through all IDs and add elevatorsystem pr id
-	for id := range OrderSystem.CabRequests {
+
+	//We only want to add alive peers to HRA input
+	for _, id := range peers {
 		hraElevSys.ElevatorStates[id] = GenerateLocalElev(elevatorSystems[id], id, OrderSystem)
 	}
 
@@ -455,6 +406,7 @@ func TransitionHallRequests(internalRequests [][]int, networkRequests [][]int) [
 	return internalRequests
 }
 
+// Move these?
 func updateHallLights(hall_orders [][]int) {
 	for floor, floorRow := range hall_orders {
 		for btn, order := range floorRow {

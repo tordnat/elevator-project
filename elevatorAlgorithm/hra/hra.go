@@ -92,8 +92,8 @@ func Encode(system ElevatorSystem) string {
 }
 
 func AssignRequests(elevatorStates string) string {
-	//out, err := exec.Command("./elevatorAlgorithm/hra/hall_request_assigner_macos", "-i", (elevatorStates)).Output() //
 	out, err := exec.Command("./hall_request_assigner", "--includeCab", "-i", (elevatorStates)).Output()
+
 
 	if err != nil {
 		fmt.Println("Error ", err)
