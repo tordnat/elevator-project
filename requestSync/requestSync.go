@@ -34,7 +34,6 @@ const (
 )
 
 const bcastPort int = 25565
-const peersPort int = 25566
 
 type SyncOrder map[string]int //Map of what each elevator thinks the state of this order is (Could we reduce amount of state even more?
 
@@ -48,17 +47,13 @@ type OrderSystem struct {
 }
 
 // Shit name: elevatorId is ambiguous, who's ID? Ours? Network? Local?
-func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, orderAssignment chan [][]bool, orderCompleted chan requests.ClearFloorOrders) {
+func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, orderAssignment chan [][]bool, orderCompleted chan requests.ClearFloorOrders, peersReciever chan peers.PeerUpdate) {
 	btnEvent := make(chan elevio.ButtonEvent)
 	networkReciever := make(chan StateMsg)
 	networkTransmitter := make(chan StateMsg)
-	peersReciever := make(chan peers.PeerUpdate)
-	peersTransmitter := make(chan bool)
 
 	go bcast.Receiver(bcastPort, networkReciever)
 	go bcast.Transmitter(bcastPort, networkTransmitter)
-	go peers.Receiver(peersPort, peersReciever)
-	go peers.Transmitter(peersPort, elevatorId, peersTransmitter)
 
 	go elevio.PollButtons(btnEvent)
 
