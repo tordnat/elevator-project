@@ -167,7 +167,7 @@ func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem Sync
 	} else {
 		log.Println("Could not transition cabs. We did not add elevator", networkMsg.Id, "to syncOrderSystem")
 	}
-	updatedSyncOrderSystem = updateSyncOrderSystem(localId, updatedSyncOrderSystem, orderSystem)
+	updatedSyncOrderSystem = UpdateSyncOrderSystem(localId, updatedSyncOrderSystem, orderSystem)
 
 	return ConsensusBarrierTransition(localId, updatedSyncOrderSystem, peers)
 }
@@ -321,7 +321,7 @@ func newOrderSystem(id string) OrderSystem {
 	}
 }
 
-func updateSyncOrderSystem(localId string, syncOrderSystem SyncOrderSystem, orderSystem OrderSystem) SyncOrderSystem {
+func UpdateSyncOrderSystem(localId string, syncOrderSystem SyncOrderSystem, orderSystem OrderSystem) SyncOrderSystem {
 	for i, floor := range orderSystem.HallRequests {
 		for j, req := range floor {
 			syncOrderSystem.HallRequests[i][j][localId] = req
