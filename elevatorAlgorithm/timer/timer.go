@@ -2,11 +2,7 @@ package timer
 
 import "time"
 
-type DoorTimer *time.Timer
-type ObstructionTimer *time.Timer
-type InacitivtyTimer *time.Timer
-
-func InitTimers() (DoorTimer, ObstructionTimer, InacitivtyTimer) {
+func InitTimers() (*time.Timer, *time.Timer, *time.Timer) {
 	doorTimer := time.NewTimer(0 * time.Second)
 	obstructionTimer := time.NewTimer(0 * time.Second)
 	inactivityTimer := time.NewTimer(0 * time.Second)

@@ -11,15 +11,11 @@ import (
 	"time"
 )
 
-const INACTIVITY_TIMEOUT = 9 * time.Second
+const obstructionTimeout = 5 * time.Second
+const inactivityTimeout = 9 * time.Second
 
-func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrders, floorEvent chan int, obstructionEvent chan bool, elevStateToSync chan elevator.ElevatorState, peersReceiver chan peers.PeerUpdate) {
-	elevState := elevator.ElevatorState{elevator.EB_Idle, elevio.GetFloor(), elevio.MD_Stop, [][]bool{
-		{false, false, false},
-		{false, false, false},
-		{false, false, false},
-		{false, false, false}}} //Fix this!
-
+func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrders, floorEvent chan int, obstructionEvent chan bool, elevStateToSync chan elevator.Elevator, peersReceiver chan peers.PeerUpdate) {
+	elevState := elevator.NewElevator(elevator.EB_Idle, elevio.GetFloor(), elevio.MD_Stop, elevator.N_FLOORS)
 	doorTimer, obstructionTimer, inactivityTimer := timer.InitTimers()
 
 	isObstructed := false
@@ -62,27 +58,34 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 		case <-obstructionTimer.C:
 			if len(activePeers) > 1 { //If we are alone, we cannot reset on obstruction or inactivity without loosing orders
 				os.Exit(1)
+			} else {
+				obstructionTimer.Reset(obstructionTimeout)
 			}
 		case <-inactivityTimer.C:
 			if len(activePeers) > 1 {
 				os.Exit(2)
+			} else {
+				inactivityTimer.Reset(inactivityTimeout)
 			}
 		}
-		elevStateToSync <- elevState //Should this be in a timer?
+		select {
+		case elevStateToSync <- elevState: // Prevent blocking
+		default:
+		}
 	}
 }
 
 func resetElevatorTimers(isObstructed bool, obstructionTimer *time.Timer, doorTimer *time.Timer) { //Add doorTImerReset here as well
 	if isObstructed {
 		log.Println("Obstruction occured!")
-		obstructionTimer.Reset(INACTIVITY_TIMEOUT)
+		obstructionTimer.Reset(inactivityTimeout)
 	} else {
 		obstructionTimer.Stop()
 	}
 	doorTimer.Reset(elevator.DOOR_OPEN_DURATION)
 }
 
-func updateOrders(elevState elevator.ElevatorState, doorTimer *time.Timer, inactivityTimer *time.Timer) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
+func updateOrders(elevState elevator.Elevator, doorTimer *time.Timer, inactivityTimer *time.Timer) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
 	if requests.HaveOrders(elevState.Floor, elevState.Requests) { //Consider movign if statement out of function
 		switch elevState.Behaviour {
 		case elevator.EB_Idle:
@@ -96,7 +99,7 @@ func updateOrders(elevState elevator.ElevatorState, doorTimer *time.Timer, inact
 				elevio.SetDoorOpenLamp(true)
 				doorTimer.Reset(elevator.DOOR_OPEN_DURATION)
 			case elevator.EB_Moving:
-				inactivityTimer.Reset(INACTIVITY_TIMEOUT)
+				inactivityTimer.Reset(inactivityTimeout)
 				elevio.SetMotorDirection(elevState.Direction)
 			}
 		}
@@ -104,7 +107,7 @@ func updateOrders(elevState elevator.ElevatorState, doorTimer *time.Timer, inact
 	return elevState.Behaviour, elevState.Direction
 }
 
-func OrdersToClear(elevState elevator.ElevatorState) requests.ClearFloorOrders {
+func OrdersToClear(elevState elevator.Elevator) requests.ClearFloorOrders {
 	emptyClear := requests.ClearFloorOrders{elevState.Floor, false, false, false}
 	if elevState.Behaviour == elevator.EB_DoorOpen {
 		orderToClearImmediately := requests.ClearAtFloor(elevState.Floor, elevState.Direction, elevState.Requests)
@@ -115,7 +118,7 @@ func OrdersToClear(elevState elevator.ElevatorState) requests.ClearFloorOrders {
 	return emptyClear
 }
 
-func OnFloorArrival(elevState elevator.ElevatorState, doorTimer *time.Timer, inactivityTimer *time.Timer, isObstructed bool, obstructionTimer *time.Timer) (elevator.ElevatorBehaviour, requests.ClearFloorOrders) {
+func OnFloorArrival(elevState elevator.Elevator, doorTimer *time.Timer, inactivityTimer *time.Timer, isObstructed bool, obstructionTimer *time.Timer) (elevator.ElevatorBehaviour, requests.ClearFloorOrders) {
 	clearOrder := requests.ClearFloorOrders{elevState.Floor, false, false, false}
 	switch elevState.Behaviour {
 	case elevator.EB_Moving:
@@ -137,7 +140,7 @@ func OnFloorArrival(elevState elevator.ElevatorState, doorTimer *time.Timer, ina
 	return elevState.Behaviour, clearOrder
 }
 
-func OnDoorTimeOut(elevState elevator.ElevatorState, doorTimer *time.Timer, inactivityTimer *time.Timer) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
+func OnDoorTimeOut(elevState elevator.Elevator, doorTimer *time.Timer, inactivityTimer *time.Timer) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
 	switch elevState.Behaviour {
 	case elevator.EB_DoorOpen:
 		pair := requests.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Requests)
@@ -146,12 +149,13 @@ func OnDoorTimeOut(elevState elevator.ElevatorState, doorTimer *time.Timer, inac
 
 		switch elevState.Behaviour {
 		case elevator.EB_DoorOpen:
+			//inactivityTimer.Reset(inactivityTimeout)
 			doorTimer.Reset(elevator.DOOR_OPEN_DURATION)
 		case elevator.EB_Idle:
 			elevio.SetDoorOpenLamp(false)
 			elevio.SetMotorDirection(elevState.Direction)
 		case elevator.EB_Moving:
-			inactivityTimer.Reset(INACTIVITY_TIMEOUT)
+			inactivityTimer.Reset(inactivityTimeout)
 			elevio.SetDoorOpenLamp(false)
 			elevio.SetMotorDirection(elevState.Direction)
 		}

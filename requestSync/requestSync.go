@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-type ElevatorState struct {
+type Elevator struct {
 	Behaviour elevator.ElevatorBehaviour
 	Floor     int
 	Direction elevio.MotorDirection
@@ -20,7 +20,7 @@ type ElevatorState struct {
 type StateMsg struct {
 	Id            string
 	Counter       uint64 //Non-monotonic counter to only recieve newest data
-	ElevatorState ElevatorState
+	ElevatorState Elevator
 	OrderSystem   OrderSystem
 }
 
@@ -46,8 +46,7 @@ type OrderSystem struct {
 	CabRequests  map[string][]int
 }
 
-// Shit name: elevatorId is ambiguous, who's ID? Ours? Network? Local?
-func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, orderAssignment chan [][]bool, orderCompleted chan requests.ClearFloorOrders, peersReciever chan peers.PeerUpdate) {
+func Sync(elevatorSystemFromFSM chan elevator.Elevator, localId string, orderAssignment chan [][]bool, orderCompleted chan requests.ClearFloorOrders, peersReciever chan peers.PeerUpdate) {
 	btnEvent := make(chan elevio.ButtonEvent)
 	networkReciever := make(chan StateMsg)
 	networkTransmitter := make(chan StateMsg)
@@ -60,70 +59,69 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 	timer := time.NewTimer(100 * time.Millisecond)
 	var msgCounter uint64 = 0
 
-	elevatorSystems := make(map[string]ElevatorState)
-	elevatorSystems[elevatorId] = ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop}
+	elevatorSystems := make(map[string]Elevator)
+	elevatorSystems[localId] = Elevator{elevator.EB_Idle, -1, elevio.MD_Stop}
 	tmp := <-elevatorSystemFromFSM
 
-	var tmpElevator ElevatorState
+	var tmpElevator Elevator
 	tmpElevator.Behaviour = tmp.Behaviour
 	tmpElevator.Direction = tmp.Direction
 	tmpElevator.Floor = tmp.Floor
-	elevatorSystems[elevatorId] = tmpElevator
+	elevatorSystems[localId] = tmpElevator
 
-	syncOrderSystem := NewSyncOrderSystem(elevatorId)
+	syncOrderSystem := NewSyncOrderSystem(localId)
 	log.Println(syncOrderSystem)
 	var activePeers []string
 
 	for {
 		select {
 		case btn := <-btnEvent:
-			syncOrderSystem = AddOrder(elevatorId, syncOrderSystem, btn)
+			syncOrderSystem = AddOrder(localId, syncOrderSystem, btn)
 			msgCounter += 1 //To prevent forgetting counter, this should perhaps be in a seperate function
-			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncOrderSystemToOrderSystem(elevatorId, syncOrderSystem)}
+			networkTransmitter <- StateMsg{localId, msgCounter, elevatorSystems[localId], SyncOrderSystemToOrderSystem(localId, syncOrderSystem)}
 
 		case networkMsg := <-networkReciever:
-			if networkMsg.Counter <= msgCounter && len(activePeers) != 1 && networkMsg.Id == elevatorId { //To only listen to our own message when we are alone
+			if networkMsg.Counter <= msgCounter && len(activePeers) != 1 && networkMsg.Id == localId { //To only listen to our own message when we are alone
 				msgCounter += 1
 				break
 			}
 			elevatorSystems[networkMsg.Id] = networkMsg.ElevatorState
 			msgCounter = networkMsg.Counter
-			syncOrderSystem = Transition(elevatorId, networkMsg, syncOrderSystem, activePeers)
+			syncOrderSystem = Transition(localId, networkMsg, syncOrderSystem, activePeers)
 
-			if elevatorSystems[elevatorId].Floor == -1 {
+			if elevatorSystems[localId].Floor == -1 {
 				log.Println("Elevator floor is -1, will not send to hra")
 				break
 			}
-			elevatorSystem := SyncOrderSystemToElevatorSystem(elevatorSystems, elevatorId, syncOrderSystem, activePeers)
+			elevatorSystem := SyncOrderSystemToElevatorSystem(elevatorSystems, localId, syncOrderSystem, activePeers)
 			updateHallLights(elevatorSystem.HallRequests)
-			updateCabLights(elevatorSystem.ElevatorStates[elevatorId].CabRequests)
-			hraOutput := hra.Decode(hra.AssignRequests(hra.Encode(elevatorSystem)))[elevatorId]
+			updateCabLights(elevatorSystem.ElevatorStates[localId].CabRequests)
+			hraOutput := hra.Decode(hra.AssignRequests(hra.Encode(elevatorSystem)))[localId]
 			if len(hraOutput) > 0 {
 				select {
 				case orderAssignment <- hraOutput:
 				default:
-					log.Println("No message sent")
 				}
 			} else {
-				log.Println("Hra output empty, input to hra (There could be invalid peers which are not sent here):", SyncOrderSystemToElevatorSystem(elevatorSystems, elevatorId, syncOrderSystem, activePeers))
+				log.Println("Hra output empty, input to hra (There could be invalid peers which are not sent here):", SyncOrderSystemToElevatorSystem(elevatorSystems, localId, syncOrderSystem, activePeers))
 			}
 
 		case peersUpdate := <-peersReciever:
 			activePeers = peersUpdate.Peers
-			log.Println("Peers:", peersUpdate.Peers, "Elevsys:", len(elevatorSystems), "syncOrderSystem cabs num:", len(syncOrderSystem.CabRequests), "syncOrderSys specific orders: ", len(syncOrderSystem.CabRequests[elevatorId][0]))
+			log.Println("Peers:", peersUpdate.Peers, "Elevsys:", len(elevatorSystems), "syncOrderSystem cabs num:", len(syncOrderSystem.CabRequests), "syncOrderSys specific orders: ", len(syncOrderSystem.CabRequests[localId][0]))
 		case elevator := <-elevatorSystemFromFSM:
-			var tmpElevator ElevatorState
+			var tmpElevator Elevator
 			tmpElevator.Behaviour = elevator.Behaviour
 			tmpElevator.Direction = elevator.Direction
 			tmpElevator.Floor = elevator.Floor
-			elevatorSystems[elevatorId] = tmpElevator
+			elevatorSystems[localId] = tmpElevator
 
 		case orderToClear := <-orderCompleted:
-			syncOrderSystem = RemoveOrder(elevatorId, orderToClear, syncOrderSystem)
+			syncOrderSystem = RemoveOrder(localId, orderToClear, syncOrderSystem)
 
 		case <-timer.C: //Timer reset, send new state update
 			msgCounter += 1
-			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncOrderSystemToOrderSystem(elevatorId, syncOrderSystem)}
+			networkTransmitter <- StateMsg{localId, msgCounter, elevatorSystems[localId], SyncOrderSystemToOrderSystem(localId, syncOrderSystem)}
 			timer.Reset(time.Millisecond * 10)
 		}
 	}
@@ -348,7 +346,7 @@ func SyncOrderSystemToOrderSystem(localId string, syncOrderSystem SyncOrderSyste
 	return newOrderSystem
 }
 
-func GenerateLocalElev(elevatorSystem ElevatorState, id string, OrderSystem SyncOrderSystem) hra.LocalElevatorState {
+func GenerateLocalElev(elevatorSystem Elevator, id string, OrderSystem SyncOrderSystem) hra.LocalElevatorState {
 	localElevState := hra.LocalElevatorState{
 		Behaviour:   elevatorSystem.Behaviour,
 		Floor:       elevatorSystem.Floor,
@@ -363,7 +361,7 @@ func GenerateLocalElev(elevatorSystem ElevatorState, id string, OrderSystem Sync
 	return localElevState
 }
 
-func SyncOrderSystemToElevatorSystem(elevatorSystems map[string]ElevatorState, localId string, OrderSystem SyncOrderSystem, peers []string) hra.ElevatorSystem {
+func SyncOrderSystemToElevatorSystem(elevatorSystems map[string]Elevator, localId string, OrderSystem SyncOrderSystem, peers []string) hra.ElevatorSystem {
 	hraElevSys := hra.ElevatorSystem{
 		HallRequests:   [][]int{{unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}, {unknownOrder, unknownOrder}},
 		ElevatorStates: map[string]hra.LocalElevatorState{},

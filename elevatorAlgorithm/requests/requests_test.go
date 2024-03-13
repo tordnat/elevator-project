@@ -4,14 +4,13 @@ import (
 	"elevatorAlgorithm/elevator"
 	"elevatorAlgorithm/fsm"
 	"elevatorAlgorithm/requests"
-
-	//"elevatorAlgorithm/timer"
+	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
 	"testing"
 )
 
 func TestRequests(t *testing.T) {
-	testState := elevator.ElevatorState{
+	testState := elevator.Elevator{
 		Behaviour: elevator.EB_Moving,
 		Floor:     1,
 		Direction: elevio.MD_Up,
@@ -174,7 +173,9 @@ func TestRequests(t *testing.T) {
 	testState.Floor = 2
 	testState.Direction = elevio.MD_Up
 	testState.Requests = [][]bool{{false, false, true}, {false, false, false}, {true, true, false}, {false, false, false}}
-	testState.Behaviour, _ = fsm.OnFloorArrival(testState)
+	doorTimer, obstructionTimer, inactivityTimer := timer.InitTimers()
+	testState.Behaviour, _ = fsm.OnFloorArrival(testState, doorTimer, inactivityTimer, false, obstructionTimer)
+
 	if testState.Direction != elevio.MD_Up {
 		t.Error("Failed assert, MD should be up")
 	}

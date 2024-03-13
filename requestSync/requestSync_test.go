@@ -68,6 +68,25 @@ func TestTransitionOrder(t *testing.T) {
 
 }
 
+func TestTransitionCabRequests(t *testing.T) {
+
+	internalReq := []int{noOrder, unknownOrder, servicedOrder, noOrder}
+	netReq := []int{noOrder, servicedOrder, unconfirmedOrder, confirmedOrder}
+	result := []int{noOrder, servicedOrder, servicedOrder, confirmedOrder}
+	if !areEqualArr(requestSync.TransitionCabRequests(internalReq, netReq), result) {
+		t.Error("Failed assert, did not transition cabs correct")
+		fmt.Println("Got: ", requestSync.TransitionCabRequests(internalReq, netReq))
+		fmt.Println("Expected ", result)
+
+		internalReq := []int{noOrder, unknownOrder, servicedOrder, noOrder}
+		netReq := []int{noOrder, unknownOrder, servicedOrder, noOrder}
+		if !areEqualArr(requestSync.TransitionCabRequests(internalReq, netReq), netReq) {
+			t.Error("Failed assert, did not transition cabs correctly")
+		}
+	}
+
+}
+
 func TestConsensusBarrier(t *testing.T) {
 	//Test consensus. These should be improved to check entire state, not just single orders
 	localId := "0"
@@ -97,7 +116,7 @@ func TestConsensusBarrier(t *testing.T) {
 	//Set floor zero cab req to unknown
 	orderSys.CabRequests[localId][0][localId] = confirmedOrder
 
-	elevatorSystem := requestSync.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop}
+	elevatorSystem := requestSync.Elevator{elevator.EB_Idle, -1, elevio.MD_Stop}
 	networkMsg := requestSync.StateMsg{localId, 2, elevatorSystem, requestSync.SyncOrderSystemToOrderSystem(localId, orderSys)}
 	orderSysAfterTrans = requestSync.Transition(localId, networkMsg, orderSys, []string{localId})
 	if orderSysAfterTrans.CabRequests[localId][0][localId] != confirmedOrder {
@@ -146,10 +165,6 @@ func TestConsensusBarrier(t *testing.T) {
 	if newSys.HallRequests[0][0][localId] != unconfirmedOrder && newSys.HallRequests[0][0][elev1id] != unconfirmedOrder && newSys.HallRequests[0][0][elev2id] != unconfirmedOrder {
 		t.Error("Not unconfirmed")
 	}
-}
-
-func TestAddElevatorToSyncOrderSystem(t *testing.T) {
-
 }
 
 func areEqualArr(a, b []int) bool {

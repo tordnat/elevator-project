@@ -24,9 +24,7 @@ func main() {
 	floorEvent := make(chan int)
 	obstructionEvent := make(chan bool)
 
-	peersReciever := make(chan peers.PeerUpdate)
 	peersTransmitter := make(chan bool)
-
 	peersReceiverFSM := make(chan peers.PeerUpdate)
 	peersReceiverRequestSync := make(chan peers.PeerUpdate)
 
@@ -34,15 +32,15 @@ func main() {
 	elevio.SetMotorDirection(elevio.MD_Down)
 	for elevio.GetFloor() == -1 {
 	}
+	elevio.SetMotorDirection(elevio.MD_Stop)
 	for elevio.GetObstruction() {
 		elevio.SetDoorOpenLamp(true)
 	}
 	elevio.SetDoorOpenLamp(false)
-	elevio.SetMotorDirection(elevio.MD_Stop)
+	log.Println("Elevator", elevatorId, "initialized")
 
-	go peers.Receiver(peersPort, peersReciever)
 	go peers.Transmitter(peersPort, elevatorId, peersTransmitter)
-	go peersChannelForwarder(peersReciever, []chan peers.PeerUpdate{peersReceiverFSM, peersReceiverRequestSync})
+	go peers.ReceiverForwarder(peersPort, []chan peers.PeerUpdate{peersReceiverFSM, peersReceiverRequestSync})
 
 	go elevio.PollButtons(buttonEvent)
 	go elevio.PollFloorSensor(floorEvent)
@@ -51,18 +49,8 @@ func main() {
 	//All channels of FSM go here
 	orderAssignment := make(chan [][]bool)
 	orderCompleted := make(chan requests.ClearFloorOrders)
-	elevStateFromFSM := make(chan elevator.ElevatorState)
+	elevStateFromFSM := make(chan elevator.Elevator)
 
 	go fsm.FSM(orderAssignment, orderCompleted, floorEvent, obstructionEvent, elevStateFromFSM, peersReceiverFSM)
 	requestSync.Sync(elevStateFromFSM, elevatorId, orderAssignment, orderCompleted, peersReceiverRequestSync)
-}
-
-func peersChannelForwarder(sender chan peers.PeerUpdate, recipients []chan peers.PeerUpdate) {
-	for peerUpdateMsg := range sender {
-		for _, recipient := range recipients {
-			go func(recipient chan peers.PeerUpdate, msg peers.PeerUpdate) { // Forwarding is not blocking
-				recipient <- msg
-			}(recipient, peerUpdateMsg)
-		}
-	}
 }

@@ -18,7 +18,7 @@ const (
 	EB_Moving
 )
 
-type ElevatorState struct {
+type Elevator struct {
 	Behaviour ElevatorBehaviour
 	Floor     int
 	Direction elevio.MotorDirection
@@ -37,4 +37,16 @@ func (eb ElevatorBehaviour) String() string {
 	} else {
 		return "EB_UNDEFINED"
 	}
+}
+
+func NewElevator(behaviour ElevatorBehaviour, floor int, dir elevio.MotorDirection, numFloors int) Elevator {
+	newElevator := Elevator{}
+	newElevator.Behaviour = behaviour
+	newElevator.Floor = floor
+	newElevator.Direction = dir
+	newElevator.Requests = make([][]bool, numFloors)
+	for i := 0; i < numFloors; i++ {
+		newElevator.Requests[i] = make([]bool, N_BUTTONS)
+	}
+	return newElevator
 }
