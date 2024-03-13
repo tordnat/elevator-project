@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+var movingWatchdog *time.Timer
+
 func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrders, floorEvent chan int, obstructionEvent chan bool, elevStateToSync chan elevator.ElevatorState) {
 	elevState := elevator.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop, [][]bool{
 		{false, false, false},
@@ -18,8 +20,10 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 
 	doorTimer := time.NewTimer(0 * time.Second)
 	obstructedTimer := time.NewTimer(0 * time.Second)
+	movingWatchdog = time.NewTimer(0*time.Second)
 	<-doorTimer.C       // Drain channel
 	<-obstructedTimer.C // Drain channel
+	<-movingWatchdog.C
 	log.Println("Initializing Elevator FSM")
 	elevState = onInitBetweenFloors(elevState)
 	for elevio.GetFloor() == -1 {
@@ -39,6 +43,7 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 			clearOrders <- OrdersToClear(elevState) // This must be run last to not clear orders at the wrong place
 
 		case floor := <-floorEvent:
+			elevio.SetFloorIndicator(floor)
 			elevState.Floor = floor
 			var clearOrder requests.ClearFloorOrders
 			elevState.Behaviour, clearOrder = OnFloorArrival(elevState, doorTimer)
@@ -60,7 +65,7 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 			if elevState.Behaviour == elevator.EB_DoorOpen {
 				if isObstructed {
 					log.Println("Obstruction occured!")
-					obstructedTimer.Reset(time.Second * 7)
+					obstructedTimer.Reset(time.Second * elevator.DOOR_OBSTRUCTION_TIMEOUT)
 				} else {
 					obstructedTimer.Stop()
 				}
@@ -68,6 +73,8 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 			}
 		case <-obstructedTimer.C:
 			os.Exit(1)
+		case <-movingWatchdog.C:
+			os.Exit(2)
 		}
 		elevStateToSync <- elevState //Must find out if this is a good place to sync elevState
 	}
@@ -94,6 +101,7 @@ func updateOrders(elevState elevator.ElevatorState, doorTimer *time.Timer) (elev
 				elevio.SetDoorOpenLamp(true)
 				doorTimer.Reset(elevator.DOOR_OPEN_DURATION_S * time.Second)
 			case elevator.EB_Moving:
+				movingWatchdog.Reset(time.Second * 10)
 				elevio.SetMotorDirection(elevState.Direction)
 			}
 		}
@@ -117,6 +125,7 @@ func OnFloorArrival(elevState elevator.ElevatorState, doorTimer *time.Timer) (el
 	switch elevState.Behaviour {
 	case elevator.EB_Moving:
 		if requests.ShouldStop(elevState.Direction, elevState.Floor, elevState.Requests) {
+			movingWatchdog.Stop()
 			elevio.SetMotorDirection(elevio.MD_Stop)
 			clearOrder.Floor = elevState.Floor
 			clearOrder.Cab = true
@@ -145,6 +154,7 @@ func OnDoorTimeOut(elevState elevator.ElevatorState, doorTimer *time.Timer) (ele
 			elevio.SetDoorOpenLamp(false)
 			elevio.SetMotorDirection(elevState.Direction)
 		case elevator.EB_Moving:
+			movingWatchdog.Reset(time.Second * 10)
 			elevio.SetDoorOpenLamp(false)
 			elevio.SetMotorDirection(elevState.Direction)
 		}
