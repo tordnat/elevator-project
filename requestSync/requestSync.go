@@ -57,7 +57,7 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 
 	go elevio.PollButtons(btnEvent)
 
-	timer := time.NewTimer(1 * time.Second)
+	timer := time.NewTimer(100 * time.Millisecond)
 	var msgCounter uint64 = 0
 
 	elevatorSystems := make(map[string]ElevatorState)
@@ -124,7 +124,7 @@ func Sync(elevatorSystemFromFSM chan elevator.ElevatorState, elevatorId string, 
 		case <-timer.C: //Timer reset, send new state update
 			msgCounter += 1
 			networkTransmitter <- StateMsg{elevatorId, msgCounter, elevatorSystems[elevatorId], SyncOrderSystemToOrderSystem(elevatorId, syncOrderSystem)}
-			timer.Reset(time.Millisecond * 1000)
+			timer.Reset(time.Millisecond * 10)
 		}
 	}
 }

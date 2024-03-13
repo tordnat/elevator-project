@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const INACTIVITY_TIMEOUT = 5 * time.Second
+const INACTIVITY_TIMEOUT = 9 * time.Second
 
 func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrders, floorEvent chan int, obstructionEvent chan bool, elevStateToSync chan elevator.ElevatorState, peersReceiver chan peers.PeerUpdate) {
 	elevState := elevator.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop, [][]bool{
@@ -25,30 +25,32 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 	<-doorTimer.C // Drain channels
 	<-obstructionTimer.C
 	<-inactivityTimer.C
+
 	log.Println("Initializing Elevator FSM")
 	elevState = onInitBetweenFloors(elevState) // Initialization should not be inside FSM
 	for elevio.GetFloor() == -1 {
-
 	}
 	elevio.SetMotorDirection(elevio.MD_Stop)
 	elevState.Direction = elevio.MD_Stop
 	elevState.Behaviour = elevator.EB_Idle
 	elevState.Floor = elevio.GetFloor()
 	isObstructed := false
+
 	var activePeers []string
 	elevStateToSync <- elevState
+
 	for {
 		select {
 		case orders := <-orderAssignment:
 			elevState.Requests = orders
 			elevState.Behaviour, elevState.Direction = updateOrders(elevState, doorTimer, inactivityTimer)
-			clearOrders <- OrdersToClear(elevState) // This must be run last to not clear orders at the wrong place
+			clearOrders <- OrdersToClear(elevState)
 
 		case floor := <-floorEvent:
 			elevio.SetFloorIndicator(floor)
 			elevState.Floor = floor
 			var clearOrder requests.ClearFloorOrders
-			elevState.Behaviour, clearOrder = OnFloorArrival(elevState, doorTimer, inactivityTimer)
+			elevState.Behaviour, clearOrder = OnFloorArrival(elevState, doorTimer, inactivityTimer, isObstructed, obstructionTimer)
 			clearOrders <- clearOrder
 
 		case peersUpdate := <-peersReceiver:
@@ -68,16 +70,10 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 
 		case isObstructed = <-obstructionEvent:
 			if elevState.Behaviour == elevator.EB_DoorOpen {
-				if isObstructed {
-					log.Println("Obstruction occured!")
-					obstructionTimer.Reset(INACTIVITY_TIMEOUT)
-				} else {
-					obstructionTimer.Stop()
-				}
-				doorTimer.Reset(elevator.DOOR_OPEN_DURATION)
+				resetTimers(isObstructed, obstructionTimer, doorTimer)
 			}
 		case <-obstructionTimer.C:
-			if len(activePeers) > 1 {
+			if len(activePeers) > 1 { //If we are alone, we cannot reset on obstruction or inactivity without loosing orders
 				os.Exit(1)
 			}
 		case <-inactivityTimer.C:
@@ -85,8 +81,18 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 				os.Exit(2)
 			}
 		}
-		elevStateToSync <- elevState //Must find out if this is a good place to sync elevState
+		elevStateToSync <- elevState //Should this be in a timer?
 	}
+}
+
+func resetTimers(isObstructed bool, obstructionTimer *time.Timer, doorTimer *time.Timer) { //Add doorTImerReset here as well
+	if isObstructed {
+		log.Println("Obstruction occured!")
+		obstructionTimer.Reset(INACTIVITY_TIMEOUT)
+	} else {
+		obstructionTimer.Stop()
+	}
+	doorTimer.Reset(elevator.DOOR_OPEN_DURATION)
 }
 
 func onInitBetweenFloors(e elevator.ElevatorState) elevator.ElevatorState {
@@ -129,7 +135,7 @@ func OrdersToClear(elevState elevator.ElevatorState) requests.ClearFloorOrders {
 	return emptyClear
 }
 
-func OnFloorArrival(elevState elevator.ElevatorState, doorTimer *time.Timer, inactivityTimer *time.Timer) (elevator.ElevatorBehaviour, requests.ClearFloorOrders) {
+func OnFloorArrival(elevState elevator.ElevatorState, doorTimer *time.Timer, inactivityTimer *time.Timer, isObstructed bool, obstructionTimer *time.Timer) (elevator.ElevatorBehaviour, requests.ClearFloorOrders) {
 	clearOrder := requests.ClearFloorOrders{elevState.Floor, false, false, false}
 	switch elevState.Behaviour {
 	case elevator.EB_Moving:
@@ -141,9 +147,11 @@ func OnFloorArrival(elevState elevator.ElevatorState, doorTimer *time.Timer, ina
 			clearOrder.HallUp = requests.ShouldClearHallUp(elevState.Floor, elevState.Direction, elevState.Requests)
 			clearOrder.HallDown = requests.ShouldClearHallDown(elevState.Floor, elevState.Direction, elevState.Requests)
 
-			doorTimer.Reset(elevator.DOOR_OPEN_DURATION)
+			resetTimers(isObstructed, obstructionTimer, doorTimer)
+
 			elevState.Behaviour = elevator.EB_DoorOpen
 			elevio.SetDoorOpenLamp(true)
+
 		}
 	}
 	return elevState.Behaviour, clearOrder

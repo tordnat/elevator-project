@@ -29,6 +29,12 @@ func main() {
 
 	peersReceiverFSM := make(chan peers.PeerUpdate)
 	peersReceiverRequestSync := make(chan peers.PeerUpdate)
+	//To not start in an obstructed state
+	for elevio.GetObstruction() {
+		elevio.SetDoorOpenLamp(true)
+	}
+	elevio.SetDoorOpenLamp(false)
+
 	go peers.Receiver(peersPort, peersReciever)
 	go peers.Transmitter(peersPort, elevatorId, peersTransmitter)
 	go peersChannelForwarder(peersReciever, []chan peers.PeerUpdate{peersReceiverFSM, peersReceiverRequestSync})
@@ -42,12 +48,6 @@ func main() {
 	orderAssignment := make(chan [][]bool)
 	orderCompleted := make(chan requests.ClearFloorOrders)
 	elevStateFromFSM := make(chan elevator.ElevatorState)
-
-	//To not start in an obstructed state
-	for elevio.GetObstruction() {
-		elevio.SetDoorOpenLamp(true)
-	}
-	elevio.SetDoorOpenLamp(false)
 
 	go fsm.FSM(orderAssignment, orderCompleted, floorEvent, obstructionEvent, elevStateFromFSM, peersReceiverFSM)
 	requestSync.Sync(elevStateFromFSM, elevatorId, orderAssignment, orderCompleted, peersReceiverRequestSync)
