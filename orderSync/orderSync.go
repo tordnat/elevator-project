@@ -157,23 +157,24 @@ func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem Sync
 	//Check if Sync
 	log.Println("OrderSystem cabs:", orderSystem.CabOrders)
 	log.Println("NetworkMSG cabs:", networkMsg.OrderSystem.CabOrders)
-	//
-	_, ok := updatedSyncOrderSystem.CabOrders[networkMsg.Id]
-	if ok && len(orderSystem.CabOrders[networkMsg.Id]) > 0 {
-		orderSystem.CabOrders[localId] = transition.Cab(orderSystem.CabOrders[localId], networkMsg.OrderSystem.CabOrders[localId])
-	} else {
-		log.Println("Could not transition cabs. We did not add elevator", networkMsg.Id, "to syncOrderSystem")
-	}
+	/*
+		_, ok := updatedSyncOrderSystem.CabOrders[networkMsg.Id]
+		if ok && len(orderSystem.CabOrders[networkMsg.Id]) > 0 {
+			orderSystem.CabOrders[localId] = transition.Cab(orderSystem.CabOrders[localId], orderSystem.CabOrders[networkMsg.Id])
+		} else {
+			log.Println("Could not transition cabs. We did not add elevator", networkMsg.Id, "to syncOrderSystem")
+		}
+	*/
 	updatedSyncOrderSystem = UpdateSyncOrderSystem(localId, updatedSyncOrderSystem, orderSystem)
 
 	return ConsensusBarrierTransition(localId, updatedSyncOrderSystem, peers)
 }
 
+// REmeber to never overwrite. Seperate update (transition) and adding!
 func AddElevatorToSyncOrderSystem(localId string, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
 	//Update our records of the view networkElevator has of our cabs
-	//WHY NOT USED to update our own cabs?
 	for floor, networkorder := range networkMsg.OrderSystem.CabOrders[localId] {
-		syncOrderSystem.CabOrders[localId][floor][networkMsg.Id] = networkorder
+		syncOrderSystem.CabOrders[localId][floor][networkMsg.Id] = transition.Order(syncOrderSystem.CabOrders[localId][floor][networkMsg.Id], networkorder) //Transition here is wrong
 	}
 	//Update our records of the view networkElevator has of halls
 	for floor, orders := range networkMsg.OrderSystem.HallOrders {
