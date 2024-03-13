@@ -83,7 +83,6 @@ func elevatorSystemToHraSystem(elevSystem ElevatorSystem) hraElevatorSystem {
 	return hraSystem
 }
 func Encode(system ElevatorSystem) string {
-	//Encode to JSON dynamically
 	input, err := json.Marshal(elevatorSystemToHraSystem(system))
 	if err != nil {
 		fmt.Println("Error ", err)
@@ -93,7 +92,6 @@ func Encode(system ElevatorSystem) string {
 
 func AssignRequests(elevatorStates string) string {
 	out, err := exec.Command("./hall_request_assigner", "--includeCab", "-i", (elevatorStates)).Output()
-
 	if err != nil {
 		fmt.Println("Error ", err)
 	}
@@ -110,7 +108,6 @@ func Decode(hraString string) OrderAssignments {
 }
 
 func hraHallRequestTypeToBool(requests [][]int) [][]bool {
-
 	retArr := make([][]bool, len(requests))
 	for i, row := range requests {
 		retArr[i] = make([]bool, len(row))

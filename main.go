@@ -29,17 +29,21 @@ func main() {
 
 	peersReceiverFSM := make(chan peers.PeerUpdate)
 	peersReceiverRequestSync := make(chan peers.PeerUpdate)
-	//To not start in an obstructed state
+
+	//Initialize to defined state
+	elevio.SetMotorDirection(elevio.MD_Down)
+	for elevio.GetFloor() == -1 {
+	}
 	for elevio.GetObstruction() {
 		elevio.SetDoorOpenLamp(true)
 	}
 	elevio.SetDoorOpenLamp(false)
+	elevio.SetMotorDirection(elevio.MD_Stop)
 
 	go peers.Receiver(peersPort, peersReciever)
 	go peers.Transmitter(peersPort, elevatorId, peersTransmitter)
 	go peersChannelForwarder(peersReciever, []chan peers.PeerUpdate{peersReceiverFSM, peersReceiverRequestSync})
 
-	elevio.SetDoorOpenLamp(false) // Does this need to be here?
 	go elevio.PollButtons(buttonEvent)
 	go elevio.PollFloorSensor(floorEvent)
 	go elevio.PollObstructionSwitch(obstructionEvent)

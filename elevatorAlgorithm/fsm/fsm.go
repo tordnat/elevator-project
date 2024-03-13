@@ -3,6 +3,7 @@ package fsm
 import (
 	"elevatorAlgorithm/elevator"
 	"elevatorAlgorithm/requests"
+	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
 	"log"
 	"networkDriver/peers"
@@ -13,29 +14,15 @@ import (
 const INACTIVITY_TIMEOUT = 9 * time.Second
 
 func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrders, floorEvent chan int, obstructionEvent chan bool, elevStateToSync chan elevator.ElevatorState, peersReceiver chan peers.PeerUpdate) {
-	elevState := elevator.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop, [][]bool{
+	elevState := elevator.ElevatorState{elevator.EB_Idle, elevio.GetFloor(), elevio.MD_Stop, [][]bool{
 		{false, false, false},
 		{false, false, false},
 		{false, false, false},
-		{false, false, false}}}
+		{false, false, false}}} //Fix this!
 
-	doorTimer := time.NewTimer(0 * time.Second)
-	obstructionTimer := time.NewTimer(0 * time.Second)
-	inactivityTimer := time.NewTimer(0 * time.Second)
-	<-doorTimer.C // Drain channels
-	<-obstructionTimer.C
-	<-inactivityTimer.C
+	doorTimer, obstructionTimer, inactivityTimer := timer.InitTimers()
 
-	log.Println("Initializing Elevator FSM")
-	elevState = onInitBetweenFloors(elevState) // Initialization should not be inside FSM
-	for elevio.GetFloor() == -1 {
-	}
-	elevio.SetMotorDirection(elevio.MD_Stop)
-	elevState.Direction = elevio.MD_Stop
-	elevState.Behaviour = elevator.EB_Idle
-	elevState.Floor = elevio.GetFloor()
 	isObstructed := false
-
 	var activePeers []string
 	elevStateToSync <- elevState
 
@@ -70,7 +57,7 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 
 		case isObstructed = <-obstructionEvent:
 			if elevState.Behaviour == elevator.EB_DoorOpen {
-				resetTimers(isObstructed, obstructionTimer, doorTimer)
+				resetElevatorTimers(isObstructed, obstructionTimer, doorTimer)
 			}
 		case <-obstructionTimer.C:
 			if len(activePeers) > 1 { //If we are alone, we cannot reset on obstruction or inactivity without loosing orders
@@ -85,7 +72,7 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 	}
 }
 
-func resetTimers(isObstructed bool, obstructionTimer *time.Timer, doorTimer *time.Timer) { //Add doorTImerReset here as well
+func resetElevatorTimers(isObstructed bool, obstructionTimer *time.Timer, doorTimer *time.Timer) { //Add doorTImerReset here as well
 	if isObstructed {
 		log.Println("Obstruction occured!")
 		obstructionTimer.Reset(INACTIVITY_TIMEOUT)
@@ -93,13 +80,6 @@ func resetTimers(isObstructed bool, obstructionTimer *time.Timer, doorTimer *tim
 		obstructionTimer.Stop()
 	}
 	doorTimer.Reset(elevator.DOOR_OPEN_DURATION)
-}
-
-func onInitBetweenFloors(e elevator.ElevatorState) elevator.ElevatorState {
-	elevio.SetMotorDirection(elevio.MD_Down)
-	e.Direction = elevio.MD_Down
-	e.Behaviour = elevator.EB_Moving
-	return e
 }
 
 func updateOrders(elevState elevator.ElevatorState, doorTimer *time.Timer, inactivityTimer *time.Timer) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
@@ -147,7 +127,7 @@ func OnFloorArrival(elevState elevator.ElevatorState, doorTimer *time.Timer, ina
 			clearOrder.HallUp = requests.ShouldClearHallUp(elevState.Floor, elevState.Direction, elevState.Requests)
 			clearOrder.HallDown = requests.ShouldClearHallDown(elevState.Floor, elevState.Direction, elevState.Requests)
 
-			resetTimers(isObstructed, obstructionTimer, doorTimer)
+			resetElevatorTimers(isObstructed, obstructionTimer, doorTimer)
 
 			elevState.Behaviour = elevator.EB_DoorOpen
 			elevio.SetDoorOpenLamp(true)
