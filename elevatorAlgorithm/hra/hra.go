@@ -22,13 +22,13 @@ type LocalElevatorState struct {
 	Behaviour elevator.ElevatorBehaviour
 	Floor     int
 	Direction elevio.MotorDirection
-	Caborders []int
+	CabOrders []int
 }
 
-type HallordersType [][]int
+type HallOrdersType [][]int
 
 type ElevatorSystem struct {
-	Hallorders [][]int
+	HallOrders [][]int
 
 	ElevatorStates map[string]LocalElevatorState
 }
@@ -37,11 +37,11 @@ type hraLocalElevatorState struct {
 	Behaviour string `json:"behaviour"` // "idle", "moving", or "doorOpen"
 	Floor     int    `json:"floor"`
 	Direction string `json:"direction"` // "up", "down", or "stop"
-	Caborders []bool `json:"cabRequests"`
+	CabOrders []bool `json:"cabRequests"`
 }
 
 type hraElevatorSystem struct {
-	Hallorders     [][]bool                         `json:"hallRequests"`
+	HallOrders     [][]bool                         `json:"hallRequests"`
 	ElevatorStates map[string]hraLocalElevatorState `json:"states"`
 }
 
@@ -49,14 +49,14 @@ type OrderAssignments map[string][][]bool
 
 func elevatorSystemToHraSystem(elevSystem ElevatorSystem) hraElevatorSystem {
 	hraSystem := hraElevatorSystem{
-		Hallorders:     hraHallorderTypeToBool(elevSystem.Hallorders),
+		HallOrders:     hraHallorderTypeToBool(elevSystem.HallOrders),
 		ElevatorStates: make(map[string]hraLocalElevatorState),
 	}
 
 	for id, state := range elevSystem.ElevatorStates {
 		hraState := hraLocalElevatorState{
 			Floor:     state.Floor,
-			Caborders: hraCaborderTypeToBool(state.Caborders),
+			CabOrders: hraCaborderTypeToBool(state.CabOrders),
 		}
 
 		switch state.Behaviour {
@@ -90,7 +90,7 @@ func Encode(system ElevatorSystem) string {
 	return string(input)
 }
 
-func Assignorders(elevatorStates string) string {
+func AssignOrders(elevatorStates string) string {
 	out, err := exec.Command("./hall_request_assigner", "--includeCab", "-i", (elevatorStates)).Output()
 	if err != nil {
 		fmt.Println("Error ", err)

@@ -18,7 +18,7 @@ const (
 // Example usage. Remove when module is incorporated
 func TestHra(t *testing.T) {
 	system := hra.ElevatorSystem{
-		Hallorders: [][]int{
+		HallOrders: [][]int{
 			{noOrder, noOrder}, {confirmedOrder, noOrder}, {noOrder, noOrder}, {noOrder, confirmedOrder},
 		},
 		ElevatorStates: map[string]hra.LocalElevatorState{
@@ -26,19 +26,19 @@ func TestHra(t *testing.T) {
 				Behaviour: elevator.EB_Moving,
 				Floor:     2,
 				Direction: elevio.MD_Up,
-				Caborders: []int{noOrder, noOrder, confirmedOrder, confirmedOrder},
+				CabOrders: []int{noOrder, noOrder, confirmedOrder, confirmedOrder},
 			},
 			"1": {
 				Behaviour: elevator.EB_Idle,
 				Floor:     0,
 				Direction: elevio.MD_Stop,
-				Caborders: []int{noOrder, noOrder, noOrder, noOrder},
+				CabOrders: []int{noOrder, noOrder, noOrder, noOrder},
 			},
 		},
 	}
 	input := hra.Encode(system)
 
-	hraString := hra.Assignorders(input)
+	hraString := hra.AssignOrders(input)
 	orders := hra.Decode(hraString)
 	orderString := fmt.Sprintf("%+v", orders["1"])
 	if orderString != "[[false false false] [true false false] [false false false] [false false false]]" {
