@@ -73,10 +73,11 @@ func TestConsensusBarrier(t *testing.T) {
 	localId := "0"
 	elev1id := "1"
 	elev2id := "2"
+	peerList := []string{localId, elev1id, elev2id}
 	orderSys := requestSync.NewSyncOrderSystem(localId)
 	//Set floor zero cab req to unknown
 	orderSys.CabRequests[localId][0][localId] = unconfirmedOrder
-	orderSysAfterTrans := requestSync.ConsensusBarrierTransition(localId, orderSys)
+	orderSysAfterTrans := requestSync.ConsensusBarrierTransition(localId, orderSys, []string{localId})
 	if orderSysAfterTrans.CabRequests[localId][0][localId] != confirmedOrder {
 		t.Error("Failed assert, did not barrier transition cab correct")
 	}
@@ -87,7 +88,7 @@ func TestConsensusBarrier(t *testing.T) {
 	orderSys = requestSync.NewSyncOrderSystem(localId)
 	//Set floor zero cab req to unknown
 	orderSys.CabRequests[localId][0][localId] = confirmedOrder
-	orderSysAfterTrans = requestSync.ConsensusBarrierTransition(localId, orderSys)
+	orderSysAfterTrans = requestSync.ConsensusBarrierTransition(localId, orderSys, []string{localId})
 	if orderSysAfterTrans.CabRequests["0"][0]["0"] != confirmedOrder {
 		t.Error("Failed assert, transitioned when we should have stayed")
 	}
@@ -98,7 +99,7 @@ func TestConsensusBarrier(t *testing.T) {
 
 	elevatorSystem := requestSync.ElevatorState{elevator.EB_Idle, -1, elevio.MD_Stop}
 	networkMsg := requestSync.StateMsg{localId, 2, elevatorSystem, requestSync.SyncOrderSystemToOrderSystem(localId, orderSys)}
-	orderSysAfterTrans = requestSync.Transition(localId, networkMsg, orderSys)
+	orderSysAfterTrans = requestSync.Transition(localId, networkMsg, orderSys, []string{localId})
 	if orderSysAfterTrans.CabRequests[localId][0][localId] != confirmedOrder {
 		t.Error("Failed assert, transitioned when we should have stayed")
 	}
@@ -113,7 +114,7 @@ func TestConsensusBarrier(t *testing.T) {
 	orderSys.HallRequests[0][0][elev1id] = servicedOrder
 	orderSys.HallRequests[0][0][elev2id] = servicedOrder
 
-	orderSysAfterTrans = requestSync.ConsensusBarrierTransition("0", orderSys)
+	orderSysAfterTrans = requestSync.ConsensusBarrierTransition("0", orderSys, peerList)
 	if orderSysAfterTrans.CabRequests["0"][0]["0"] != noOrder {
 		t.Error("Cab order should be completed after transitioning got: ", orderSysAfterTrans.CabRequests["0"][0]["0"])
 	}
@@ -126,7 +127,7 @@ func TestConsensusBarrier(t *testing.T) {
 
 	orderSys = requestSync.NewSyncOrderSystem("0")
 	orderSys.CabRequests["0"][0]["0"] = servicedOrder
-	orderSysAfterTrans = requestSync.ConsensusBarrierTransition("0", orderSys)
+	orderSysAfterTrans = requestSync.ConsensusBarrierTransition("0", orderSys, []string{"0"})
 	if orderSysAfterTrans.CabRequests["0"][0]["0"] != noOrder {
 		t.Error("Cab order should be completed after transitioning got: ", orderSysAfterTrans.CabRequests["1"][0]["0"])
 	}
@@ -141,7 +142,7 @@ func TestConsensusBarrier(t *testing.T) {
 	normalOrderSys := requestSync.SyncOrderSystemToOrderSystem(localId, syncOrderSys)
 
 	//All have unknown here
-	newSys := requestSync.SystemToSyncOrderSystem(localId, syncOrderSys, normalOrderSys)
+	newSys := requestSync.UpdateSyncOrderSystem(localId, syncOrderSys, normalOrderSys)
 	if newSys.HallRequests[0][0][localId] != unconfirmedOrder && newSys.HallRequests[0][0][elev1id] != unconfirmedOrder && newSys.HallRequests[0][0][elev2id] != unconfirmedOrder {
 		t.Error("Not unconfirmed")
 	}
