@@ -25,11 +25,11 @@ go build -o $CONFIG_FILE_PATH/distributedElevator main.go
 cp scripts/launch_elevator.sh $CONFIG_FILE_PATH
 cp elevatorAlgorithm/hra/hall_request_assigner $CONFIG_FILE_PATH
 echo "Installing systemd service $SERVICE_NAME"
-sudo cp scripts/$SERVICE_FILE_NAME $SERVICE_FILE_PATH
+cp scripts/$SERVICE_FILE_NAME $SERVICE_FILE_PATH
 
 # Reload systemd, enable and start the service
-sudo systemctl daemon-reload
-sudo systemctl enable "$SERVICE_NAME"
-sudo systemctl start "$SERVICE_NAME"
+systemctl daemon-reload
+systemctl enable "$SERVICE_NAME"
+systemctl start "$SERVICE_NAME"
 
 echo "$SERVICE_NAME service created and started."
