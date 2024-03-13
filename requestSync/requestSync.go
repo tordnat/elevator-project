@@ -5,6 +5,7 @@ import (
 	"elevatorAlgorithm/hra"
 	"elevatorAlgorithm/requests"
 	"elevatorDriver/elevio"
+	"elevatorDriver/lights"
 	"log"
 	"networkDriver/bcast"
 	"networkDriver/peers"
@@ -94,8 +95,8 @@ func Sync(elevatorSystemFromFSM chan elevator.Elevator, localId string, orderAss
 				break
 			}
 			elevatorSystem := SyncOrderSystemToElevatorSystem(elevatorSystems, localId, syncOrderSystem, activePeers)
-			updateHallLights(elevatorSystem.HallRequests)
-			updateCabLights(elevatorSystem.ElevatorStates[localId].CabRequests)
+			lights.UpdateHall(elevatorSystem.HallRequests, confirmedOrder)
+			lights.UpdateCab(elevatorSystem.ElevatorStates[localId].CabRequests, confirmedOrder)
 			hraOutput := hra.Decode(hra.AssignRequests(hra.Encode(elevatorSystem)))[localId]
 			if len(hraOutput) > 0 {
 				select {
@@ -397,19 +398,4 @@ func TransitionHallRequests(internalRequests [][]int, networkRequests [][]int) [
 		}
 	}
 	return internalRequests
-}
-
-// Move these?
-func updateHallLights(hall_orders [][]int) {
-	for floor, floorRow := range hall_orders {
-		for btn, order := range floorRow {
-			elevio.SetButtonLamp(elevio.ButtonType(btn), floor, (order == confirmedOrder))
-		}
-	}
-}
-
-func updateCabLights(cab_orders []int) {
-	for floor, order := range cab_orders {
-		elevio.SetButtonLamp(elevio.BT_Cab, floor, (order == confirmedOrder))
-	}
 }

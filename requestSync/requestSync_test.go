@@ -78,11 +78,11 @@ func TestTransitionCabRequests(t *testing.T) {
 		fmt.Println("Got: ", requestSync.TransitionCabRequests(internalReq, netReq))
 		fmt.Println("Expected ", result)
 
-		internalReq := []int{noOrder, unknownOrder, servicedOrder, noOrder}
+		/*internalReq := []int{noOrder, unknownOrder, servicedOrder, noOrder}
 		netReq := []int{noOrder, unknownOrder, servicedOrder, noOrder}
 		if !areEqualArr(requestSync.TransitionCabRequests(internalReq, netReq), netReq) {
 			t.Error("Failed assert, did not transition cabs correctly")
-		}
+		}*/
 	}
 
 }

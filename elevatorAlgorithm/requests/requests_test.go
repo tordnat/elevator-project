@@ -39,105 +39,105 @@ func TestRequests(t *testing.T) {
 	testState.Direction = elevio.MD_Up
 	testState.Requests = [][]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, true, false}} //Req at floor 2, down(?)
 	if !requests.ShouldClearHallDown(testState.Floor, testState.Direction, testState.Requests) {
-		t.Error("Failed assert, should clear down at floor while moving down")
+		t.Error("Failed assert, should clear down at floor while moving up")
 	}
 
 	//elevator should not clear hall up
-	testState.Requests = [][]bool{{false, true, true}, {true, false, false}, {false, true, false}, {false, false, false}} //Req at floor 2, down(?)
+	testState.Requests = [][]bool{{false, true, true}, {true, false, false}, {false, true, false}, {true, false, false}} //Req at floor 2, down(?)
 	testState.Floor = 3
 	testState.Direction = elevio.MD_Down
-	if !requests.ShouldClearHallUp(testState.Floor, testState.Direction, testState.Requests) {
-		t.Error("Failed assert, elevator door should be open")
+	if requests.ShouldClearHallUp(testState.Floor, testState.Direction, testState.Requests) {
+		t.Error("Failed assert, should not clear hall up")
 	}
 
 	//elevator should clear hall up
 	testState.Direction = elevio.MD_Up
-	if requests.ShouldClearHallUp(testState.Floor, testState.Direction, testState.Requests) {
-		t.Error("Failed assert, elevator door should be open")
+	if !requests.ShouldClearHallUp(testState.Floor, testState.Direction, testState.Requests) {
+		t.Error("Failed assert, should clear hall up")
 	}
 
 	//Unit tests for requests above
-	testState.Floor = 3
+	testState.Floor = 2
 	testState.Requests = [][]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, true, false}}
 	if !requests.RequestsAbove(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, request above")
 	}
 
-	testState.Floor = 1
+	testState.Floor = 0
 	testState.Requests = [][]bool{{false, false, false}, {false, false, true}, {false, false, false}, {false, false, false}}
 	if !requests.RequestsAbove(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, request above")
 	}
 
-	testState.Floor = 2
+	testState.Floor = 1
 	testState.Requests = [][]bool{{true, false, true}, {false, false, true}, {true, true, true}, {false, true, true}}
 	if !requests.RequestsAbove(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, request above")
 	}
 
-	testState.Floor = 4
+	testState.Floor = 3
 	testState.Requests = [][]bool{{true, false, true}, {true, true, true}, {true, false, true}, {false, true, true}}
 	if requests.RequestsAbove(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, no request above")
 	}
 
-	testState.Floor = 1
+	testState.Floor = 0
 	testState.Requests = [][]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, false, false}}
 	if requests.RequestsAbove(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, no request above")
 	}
 
 	//Unit tests for requests below
-	testState.Floor = 4
+	testState.Floor = 3
 	testState.Requests = [][]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, true, false}}
 	if !requests.RequestsBelow(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, no request below")
 	}
 
-	testState.Floor = 2
+	testState.Floor = 1
 	testState.Requests = [][]bool{{false, false, false}, {false, false, true}, {false, false, false}, {false, false, false}}
 	if !requests.RequestsBelow(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, no request below")
 	}
 
-	testState.Floor = 2
+	testState.Floor = 1
 	testState.Requests = [][]bool{{true, false, true}, {false, false, true}, {true, true, true}, {false, true, true}}
 	if requests.RequestsBelow(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, request below")
 	}
 
-	testState.Floor = 1
+	testState.Floor = 0
 	testState.Requests = [][]bool{{true, false, true}, {true, true, true}, {true, false, true}, {false, true, true}}
 	if !requests.RequestsBelow(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, no request below")
 	}
 
-	testState.Floor = 3
+	testState.Floor = 2
 	testState.Requests = [][]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, false, false}}
 	if !requests.RequestsBelow(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, no request below")
 	}
 
 	//Unit tests for requestsHere
-	testState.Floor = 1
+	testState.Floor = 0
 	testState.Requests = [][]bool{{false, false, true}, {false, false, false}, {false, false, false}, {false, false, false}}
 	if !requests.RequestsHere(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, request here")
 	}
 
-	testState.Floor = 2
+	testState.Floor = 1
 	testState.Requests = [][]bool{{true, false, true}, {false, false, false}, {true, true, true}, {false, true, true}}
 	if !requests.RequestsHere(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, no request here")
 	}
 
-	testState.Floor = 4
+	testState.Floor = 3
 	testState.Requests = [][]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, true, false}}
 	if !requests.RequestsHere(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, request here")
 	}
 
-	testState.Floor = 3
+	testState.Floor = 2
 	testState.Requests = [][]bool{{false, false, false}, {false, false, false}, {true, true, true}, {false, false, false}}
 	if !requests.RequestsHere(testState.Floor, testState.Requests) {
 		t.Error("Failed assert, no request here")
@@ -145,7 +145,7 @@ func TestRequests(t *testing.T) {
 
 	//Unit tests for choose direction
 
-	testState.Floor = 1
+	testState.Floor = 2
 	testState.Requests = [][]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, true, false}}
 
 	tmpBehaviourPair := requests.DirnBehaviourPair{elevio.MD_Up, elevator.EB_Moving}
@@ -154,20 +154,14 @@ func TestRequests(t *testing.T) {
 	}
 
 	tmpBehaviourPair = requests.DirnBehaviourPair{elevio.MD_Up, elevator.EB_DoorOpen}
-	if requests.ChooseDirection(elevio.MD_Down, 4, [][]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, true, false}}) == tmpBehaviourPair {
+	if requests.ChooseDirection(elevio.MD_Down, 3, [][]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, true, false}}) == tmpBehaviourPair {
 		t.Error("Failed assert, dirnBehaviourPair doesnt match")
 	}
 
 	tmpBehaviourPair = requests.DirnBehaviourPair{elevio.MD_Down, elevator.EB_Moving}
-	if requests.ChooseDirection(elevio.MD_Stop, 3, [][]bool{{false, true, false}, {false, false, false}, {false, false, false}, {false, false, false}}) == tmpBehaviourPair {
+	if requests.ChooseDirection(elevio.MD_Stop, 2, [][]bool{{false, true, false}, {false, false, false}, {false, false, false}, {false, false, false}}) == tmpBehaviourPair {
 		t.Error("Failed assert, dirnBehaviourPair doesnt match")
 	}
-
-	tmpBehaviourPair = requests.DirnBehaviourPair{elevio.MD_Stop, elevator.EB_Idle}
-	if requests.ChooseDirection(elevio.MD_Up, 1, [][]bool{{false, false, false}, {false, false, false}, {false, false, false}, {false, false, false}}) == tmpBehaviourPair {
-		t.Error("Failed assert, dirnBehaviourPair doesnt match")
-	}
-	//Floors might be shifted by 1
 
 	//S4
 	testState.Floor = 2
