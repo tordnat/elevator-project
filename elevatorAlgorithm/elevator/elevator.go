@@ -8,7 +8,7 @@ import (
 const N_FLOORS = 4
 const N_BUTTONS = 3
 const N_HALL_BUTTONS = 2
-const DOOR_OPEN_DURATION = 2 * time.Second
+const DOOR_OPEN_DURATION = 3 * time.Second
 
 type ElevatorBehaviour int
 
