@@ -19,29 +19,29 @@ const (
 
 // TODO: Move this to a different file
 type LocalElevatorState struct {
-	Behaviour   elevator.ElevatorBehaviour
-	Floor       int
-	Direction   elevio.MotorDirection
-	CabRequests []int
+	Behaviour elevator.ElevatorBehaviour
+	Floor     int
+	Direction elevio.MotorDirection
+	Caborders []int
 }
 
-type HallRequestsType [][]int
+type HallordersType [][]int
 
 type ElevatorSystem struct {
-	HallRequests [][]int
+	Hallorders [][]int
 
 	ElevatorStates map[string]LocalElevatorState
 }
 
 type hraLocalElevatorState struct {
-	Behaviour   string `json:"behaviour"` // "idle", "moving", or "doorOpen"
-	Floor       int    `json:"floor"`
-	Direction   string `json:"direction"` // "up", "down", or "stop"
-	CabRequests []bool `json:"cabRequests"`
+	Behaviour string `json:"behaviour"` // "idle", "moving", or "doorOpen"
+	Floor     int    `json:"floor"`
+	Direction string `json:"direction"` // "up", "down", or "stop"
+	Caborders []bool `json:"cabRequests"`
 }
 
 type hraElevatorSystem struct {
-	HallRequests   [][]bool                         `json:"hallRequests"`
+	Hallorders     [][]bool                         `json:"hallRequests"`
 	ElevatorStates map[string]hraLocalElevatorState `json:"states"`
 }
 
@@ -49,14 +49,14 @@ type OrderAssignments map[string][][]bool
 
 func elevatorSystemToHraSystem(elevSystem ElevatorSystem) hraElevatorSystem {
 	hraSystem := hraElevatorSystem{
-		HallRequests:   hraHallRequestTypeToBool(elevSystem.HallRequests),
+		Hallorders:     hraHallorderTypeToBool(elevSystem.Hallorders),
 		ElevatorStates: make(map[string]hraLocalElevatorState),
 	}
 
 	for id, state := range elevSystem.ElevatorStates {
 		hraState := hraLocalElevatorState{
-			Floor:       state.Floor,
-			CabRequests: hraCabRequestTypeToBool(state.CabRequests),
+			Floor:     state.Floor,
+			Caborders: hraCaborderTypeToBool(state.Caborders),
 		}
 
 		switch state.Behaviour {
@@ -90,7 +90,7 @@ func Encode(system ElevatorSystem) string {
 	return string(input)
 }
 
-func AssignRequests(elevatorStates string) string {
+func Assignorders(elevatorStates string) string {
 	out, err := exec.Command("./hall_request_assigner", "--includeCab", "-i", (elevatorStates)).Output()
 	if err != nil {
 		fmt.Println("Error ", err)
@@ -107,9 +107,9 @@ func Decode(hraString string) OrderAssignments {
 	return result
 }
 
-func hraHallRequestTypeToBool(requests [][]int) [][]bool {
-	retArr := make([][]bool, len(requests))
-	for i, row := range requests {
+func hraHallorderTypeToBool(orders [][]int) [][]bool {
+	retArr := make([][]bool, len(orders))
+	for i, row := range orders {
 		retArr[i] = make([]bool, len(row))
 		for j, req := range row {
 			if req == confirmedOrder {
@@ -122,9 +122,9 @@ func hraHallRequestTypeToBool(requests [][]int) [][]bool {
 	return retArr
 }
 
-func hraCabRequestTypeToBool(requests []int) []bool {
-	retArr := make([]bool, len(requests))
-	for i, req := range requests {
+func hraCaborderTypeToBool(orders []int) []bool {
+	retArr := make([]bool, len(orders))
+	for i, req := range orders {
 		if req == confirmedOrder {
 			retArr[i] = true
 		} else {

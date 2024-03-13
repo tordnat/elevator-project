@@ -14,10 +14,10 @@ We can also look at the states as a cyclic counter from 0 to 2, but with unknown
 We only send our own state to the network. Because of this we need to keep the state of all other elevators internally. (This is not set in stone, but probably gives the smallest code footprint)
 
 ### Cab vs hall
-We do not differentiate between cab and hall requests, because we want to the same code for all types of requests. 
+We do not differentiate between cab and hall orders, because we want to the same code for all types of orders. 
 This may present problems; if cab orders are not properly distributed on the network there may be a large delay for something that we know our own elevator must handle anyways. 
-The advantage is that the HRA can then know all cab request and distribute hall requests optimally (assuming it actually does this. Should be cheked). 
-We may also need to add extra explicit fault tolerance so that we are certain cab requests are served.
+The advantage is that the HRA can then know all cab order and distribute hall orders optimally (assuming it actually does this. Should be cheked). 
+We may also need to add extra explicit fault tolerance so that we are certain cab orders are served.
 
 ### Non-monotonic counter for messages
 For knowing if a message is new or old we attach a non-monotonic counter to every message. It is a uint64, so in theory our elevator system will outlive the sun if we send messages every 10ms.
@@ -29,5 +29,5 @@ We can use the peers network module by having the reciever channel in the main f
 Have *n* elevators where instead of executing order, we print out when we have acknowledged the order and decided who shold execute it (basically HRA)
 
 ### CAB sync/consensus
-We have to have consensus on cabs, same as hall requests because of the spec about not loosing orders.
+We have to have consensus on cabs, same as hall orders because of the spec about not loosing orders.
 

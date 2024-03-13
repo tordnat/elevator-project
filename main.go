@@ -2,10 +2,10 @@ package main
 
 import (
 	"elevator-project/cmd"
-	"elevator-project/requestSync"
+	"elevator-project/orderSync"
 	"elevatorAlgorithm/elevator"
 	"elevatorAlgorithm/fsm"
-	"elevatorAlgorithm/requests"
+	"elevatorAlgorithm/orders"
 	"elevatorDriver/elevio"
 	"fmt"
 	"log"
@@ -26,7 +26,7 @@ func main() {
 
 	peersTransmitter := make(chan bool)
 	peersReceiverFSM := make(chan peers.PeerUpdate)
-	peersReceiverRequestSync := make(chan peers.PeerUpdate)
+	peersReceiverorderSync := make(chan peers.PeerUpdate)
 
 	//Initialize to defined state
 	elevio.SetMotorDirection(elevio.MD_Down)
@@ -40,7 +40,7 @@ func main() {
 	log.Println("Elevator", elevatorId, "initialized")
 
 	go peers.Transmitter(peersPort, elevatorId, peersTransmitter)
-	go peers.ReceiverForwarder(peersPort, []chan peers.PeerUpdate{peersReceiverFSM, peersReceiverRequestSync})
+	go peers.ReceiverForwarder(peersPort, []chan peers.PeerUpdate{peersReceiverFSM, peersReceiverorderSync})
 
 	go elevio.PollButtons(buttonEvent)
 	go elevio.PollFloorSensor(floorEvent)
@@ -48,9 +48,9 @@ func main() {
 
 	//All channels of FSM go here
 	orderAssignment := make(chan [][]bool)
-	orderCompleted := make(chan requests.ClearFloorOrders)
+	orderCompleted := make(chan orders.ClearFloorOrders)
 	elevStateFromFSM := make(chan elevator.Elevator)
 
 	go fsm.FSM(orderAssignment, orderCompleted, floorEvent, obstructionEvent, elevStateFromFSM, peersReceiverFSM)
-	requestSync.Sync(elevStateFromFSM, elevatorId, orderAssignment, orderCompleted, peersReceiverRequestSync)
+	orderSync.Sync(elevStateFromFSM, elevatorId, orderAssignment, orderCompleted, peersReceiverorderSync)
 }

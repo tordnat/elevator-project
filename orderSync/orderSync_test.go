@@ -1,7 +1,6 @@
-package requestSync_test
+package orderSync_test
 
 import (
-	"elevator-project/requestSync"
 	"elevatorAlgorithm/elevator"
 	"elevatorDriver/elevio"
 	"fmt"

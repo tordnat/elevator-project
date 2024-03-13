@@ -22,7 +22,7 @@ type Elevator struct {
 	Behaviour ElevatorBehaviour
 	Floor     int
 	Direction elevio.MotorDirection
-	Requests  [][]bool //This should be filled from HRA
+	Orders    [][]bool //This should be filled from HRA
 }
 
 type Order elevio.ButtonEvent
@@ -44,9 +44,9 @@ func NewElevator(behaviour ElevatorBehaviour, floor int, dir elevio.MotorDirecti
 	newElevator.Behaviour = behaviour
 	newElevator.Floor = floor
 	newElevator.Direction = dir
-	newElevator.Requests = make([][]bool, numFloors)
+	newElevator.Orders = make([][]bool, numFloors)
 	for i := 0; i < numFloors; i++ {
-		newElevator.Requests[i] = make([]bool, N_BUTTONS)
+		newElevator.Orders[i] = make([]bool, N_BUTTONS)
 	}
 	return newElevator
 }

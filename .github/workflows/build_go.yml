@@ -6,7 +6,7 @@ name: Test Go Program
 on:
   push:
     branches: [ "main" ]
-  pull_request:
+  pull_order:
     branches: [ "main" ]
 
 jobs:
@@ -37,4 +37,5 @@ jobs:
     - name: Test
       run: |
         go test -v elevatorAlgorithm/hra
-        go test -v requestSync/requestSync_test.go
+        go test -v orderSync/orderSync_test.go
+        go test -v elevatorAlgorithm/orders/orders_test.go

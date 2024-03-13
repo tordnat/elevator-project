@@ -2,7 +2,7 @@ package fsm
 
 import (
 	"elevatorAlgorithm/elevator"
-	"elevatorAlgorithm/requests"
+	"elevatorAlgorithm/orders"
 	"elevatorAlgorithm/timer"
 	"elevatorDriver/elevio"
 	"log"
@@ -14,7 +14,7 @@ import (
 const obstructionTimeout = 5 * time.Second
 const inactivityTimeout = 9 * time.Second
 
-func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrders, floorEvent chan int, obstructionEvent chan bool, elevStateToSync chan elevator.Elevator, peersReceiver chan peers.PeerUpdate) {
+func FSM(orderAssignment chan [][]bool, clearOrders chan orders.ClearFloorOrders, floorEvent chan int, obstructionEvent chan bool, elevStateToSync chan elevator.Elevator, peersReceiver chan peers.PeerUpdate) {
 	elevState := elevator.NewElevator(elevator.EB_Idle, elevio.GetFloor(), elevio.MD_Stop, elevator.N_FLOORS)
 	doorTimer, obstructionTimer, inactivityTimer := timer.InitTimers()
 
@@ -25,14 +25,14 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 	for {
 		select {
 		case orders := <-orderAssignment:
-			elevState.Requests = orders
+			elevState.Orders = orders
 			elevState.Behaviour, elevState.Direction = updateOrders(elevState, doorTimer, inactivityTimer)
 			clearOrders <- OrdersToClear(elevState)
 
 		case floor := <-floorEvent:
 			elevio.SetFloorIndicator(floor)
 			elevState.Floor = floor
-			var clearOrder requests.ClearFloorOrders
+			var clearOrder orders.ClearFloorOrders
 			elevState.Behaviour, clearOrder = OnFloorArrival(elevState, doorTimer, inactivityTimer, isObstructed, obstructionTimer)
 			clearOrders <- clearOrder
 
@@ -44,11 +44,11 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan requests.ClearFloorOrde
 				break
 			}
 			elevState.Behaviour, elevState.Direction = OnDoorTimeOut(elevState, doorTimer, inactivityTimer)
-			var clearOrder requests.ClearFloorOrders
+			var clearOrder orders.ClearFloorOrders
 			clearOrder.Floor = elevState.Floor
 			clearOrder.Cab = true
-			clearOrder.HallUp = requests.ShouldClearHallUp(elevState.Floor, elevState.Direction, elevState.Requests)
-			clearOrder.HallDown = requests.ShouldClearHallDown(elevState.Floor, elevState.Direction, elevState.Requests)
+			clearOrder.HallUp = orders.ShouldClearHallUp(elevState.Floor, elevState.Direction, elevState.Orders)
+			clearOrder.HallDown = orders.ShouldClearHallDown(elevState.Floor, elevState.Direction, elevState.Orders)
 			clearOrders <- clearOrder
 
 		case isObstructed = <-obstructionEvent:
@@ -86,10 +86,10 @@ func resetElevatorTimers(isObstructed bool, obstructionTimer *time.Timer, doorTi
 }
 
 func updateOrders(elevState elevator.Elevator, doorTimer *time.Timer, inactivityTimer *time.Timer) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
-	if requests.HaveOrders(elevState.Floor, elevState.Requests) { //Consider movign if statement out of function
+	if orders.HaveOrders(elevState.Floor, elevState.Orders) { //Consider movign if statement out of function
 		switch elevState.Behaviour {
 		case elevator.EB_Idle:
-			pair := requests.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Requests)
+			pair := orders.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Orders)
 
 			elevState.Direction = pair.Dir
 			elevState.Behaviour = pair.Behaviour
@@ -107,10 +107,10 @@ func updateOrders(elevState elevator.Elevator, doorTimer *time.Timer, inactivity
 	return elevState.Behaviour, elevState.Direction
 }
 
-func OrdersToClear(elevState elevator.Elevator) requests.ClearFloorOrders {
-	emptyClear := requests.ClearFloorOrders{elevState.Floor, false, false, false}
+func OrdersToClear(elevState elevator.Elevator) orders.ClearFloorOrders {
+	emptyClear := orders.ClearFloorOrders{elevState.Floor, false, false, false}
 	if elevState.Behaviour == elevator.EB_DoorOpen {
-		orderToClearImmediately := requests.ClearAtFloor(elevState.Floor, elevState.Direction, elevState.Requests)
+		orderToClearImmediately := orders.ClearAtFloor(elevState.Floor, elevState.Direction, elevState.Orders)
 		if orderToClearImmediately != emptyClear {
 			return orderToClearImmediately
 		}
@@ -118,17 +118,17 @@ func OrdersToClear(elevState elevator.Elevator) requests.ClearFloorOrders {
 	return emptyClear
 }
 
-func OnFloorArrival(elevState elevator.Elevator, doorTimer *time.Timer, inactivityTimer *time.Timer, isObstructed bool, obstructionTimer *time.Timer) (elevator.ElevatorBehaviour, requests.ClearFloorOrders) {
-	clearOrder := requests.ClearFloorOrders{elevState.Floor, false, false, false}
+func OnFloorArrival(elevState elevator.Elevator, doorTimer *time.Timer, inactivityTimer *time.Timer, isObstructed bool, obstructionTimer *time.Timer) (elevator.ElevatorBehaviour, orders.ClearFloorOrders) {
+	clearOrder := orders.ClearFloorOrders{elevState.Floor, false, false, false}
 	switch elevState.Behaviour {
 	case elevator.EB_Moving:
-		if requests.ShouldStop(elevState.Direction, elevState.Floor, elevState.Requests) {
+		if orders.ShouldStop(elevState.Direction, elevState.Floor, elevState.Orders) {
 			inactivityTimer.Stop()
 			elevio.SetMotorDirection(elevio.MD_Stop)
 			clearOrder.Floor = elevState.Floor
 			clearOrder.Cab = true
-			clearOrder.HallUp = requests.ShouldClearHallUp(elevState.Floor, elevState.Direction, elevState.Requests)
-			clearOrder.HallDown = requests.ShouldClearHallDown(elevState.Floor, elevState.Direction, elevState.Requests)
+			clearOrder.HallUp = orders.ShouldClearHallUp(elevState.Floor, elevState.Direction, elevState.Orders)
+			clearOrder.HallDown = orders.ShouldClearHallDown(elevState.Floor, elevState.Direction, elevState.Orders)
 
 			resetElevatorTimers(isObstructed, obstructionTimer, doorTimer)
 
@@ -143,7 +143,7 @@ func OnFloorArrival(elevState elevator.Elevator, doorTimer *time.Timer, inactivi
 func OnDoorTimeOut(elevState elevator.Elevator, doorTimer *time.Timer, inactivityTimer *time.Timer) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
 	switch elevState.Behaviour {
 	case elevator.EB_DoorOpen:
-		pair := requests.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Requests)
+		pair := orders.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Orders)
 		elevState.Direction = pair.Dir
 		elevState.Behaviour = pair.Behaviour
 
