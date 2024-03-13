@@ -1,4 +1,4 @@
-package musicplayer
+package main
 
 import (
 	"log"
@@ -7,60 +7,36 @@ import (
 	"syscall"
 )
 
-var MusicPid *os.Process
-var dingPid *os.Process
-var pairPid *os.Process
-
-func PlayMusic(path string, pid *os.Process, loop_music bool) {
-	if path == "" {
-		if pid != nil {
-			pid.Signal(syscall.SIGCONT)
-		}
-		return
-	}
-
-	var cmd *exec.Cmd
-
-	if loop_music {
-		cmd = exec.Command("ffplay", path, "-autoexit", "-nodisp", "-hide_banner", "-loglevel", "warning", "-loop", "0")
-	} else {
-		cmd = exec.Command("ffplay", path, "-autoexit", "-nodisp", "-hide_banner", "-loglevel", "warning")
-	}
+func PlayElevatorMusic(musicPath string, signalChannel chan os.Signal) {
+	var musicPid *os.Process
+	cmd := exec.Command("ffplay", musicPath, "-autoexit", "-nodisp", "-hide_banner", "-loglevel", "warning", "-loop", "0")
 
 	if err := cmd.Start(); err != nil {
 		log.Printf("Failed to start music: %v", err)
 		return
 	}
+	log.Println("Playing music from: ", musicPath)
+	musicPid = cmd.Process
 
-	pid = cmd.Process
-	log.Println("Playing elevator", path)
-}
+	for {
+		sig := <-signalChannel
+		switch sig {
+		case syscall.SIGINT: // Stop
+			musicPid.Signal(sig)
+			return
+		case syscall.SIGSTOP: // Pause
+			musicPid.Signal(sig)
+		case syscall.SIGCONT: // Resume
+			musicPid.Signal(syscall.SIGCONT)
 
-func PauseMusic(pid *os.Process) {
-	if pid != nil {
-		pid.Signal(syscall.SIGSTOP)
-		log.Println("Elevator music paused")
+		}
 	}
 }
 
-func ResumeMusic(pid *os.Process) {
-	if pid != nil {
-		pid.Signal(syscall.SIGCONT)
-		log.Println("Elevator music resumed")
+func PlayFloorArrivalDing(musicPath string) {
+	cmd := exec.Command("ffplay", musicPath, "-autoexit", "-nodisp", "-hide_banner", "-loglevel", "warning")
+	if err := cmd.Start(); err != nil {
+		log.Printf("Failed to start music: %v", err)
+		return
 	}
-}
-
-func StopMusic(pid *os.Process) {
-	if pid != nil {
-		pid.Signal(syscall.SIGINT)
-		log.Println("Elevator music stopped")
-	}
-}
-
-func PlayDing() {
-	PlayMusic("media/ding.opus", dingPid, false)
-}
-
-func PlayPairing() {
-	PlayMusic("media/pairing_sound.opus", pairPid, false)
 }
