@@ -159,14 +159,10 @@ func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem Sync
 	orderSystem := SyncOrderSystemToOrderSystem(localId, updatedSyncOrderSystem)
 	orderSystem.HallOrders = transition.Hall(orderSystem.HallOrders, networkMsg.OrderSystem.HallOrders)
 	//Check if Sync
-	log.Println("OrderSystem cabs:", orderSystem.CabOrders)
-	log.Println("NetworkMSG cabs:", networkMsg.OrderSystem.CabOrders) //This now contains the orders of jonas (on jonas, opposite on 1)
-	_, ok := updatedSyncOrderSystem.CabOrders[networkMsg.Id]
-	if ok && len(orderSystem.CabOrders[networkMsg.Id]) > 0 {
-		orderSystem.CabOrders[localId] = transition.Cab(orderSystem.CabOrders[localId], networkMsg.OrderSystem.CabOrders[networkMsg.Id])
-	} else {
-		log.Println("Could not transition cabs. We did not add elevator", networkMsg.Id, "to syncOrderSystem")
-	}
+	log.Println(localId, "OrderSystem cabs:", orderSystem.CabOrders)
+	log.Println(networkMsg.Id, "NetworkMSG cabs:", networkMsg.OrderSystem.CabOrders) //This now contains the orders of jonas (on jonas, opposite on 1)
+	log.Println(localId, "Sync cabs:", updatedSyncOrderSystem.CabOrders)
+
 	updatedSyncOrderSystem = UpdateSyncOrderSystem(localId, updatedSyncOrderSystem, orderSystem)
 
 	return ConsensusBarrierTransition(localId, updatedSyncOrderSystem, peers)
@@ -174,62 +170,58 @@ func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem Sync
 
 // REmeber to never overwrite. Seperate update (transition) and adding!
 func AddElevatorToSyncOrderSystem(localId string, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
-	//Update our records of the view networkElevator has of our cabs
-	for floor, networkorder := range networkMsg.OrderSystem.CabOrders[localId] { //Make sure this never crashes
-		_, ok := syncOrderSystem.CabOrders[localId][floor][networkMsg.Id]
-		if ok {
-			syncOrderSystem.CabOrders[localId][floor][networkMsg.Id] = transition.Order(syncOrderSystem.CabOrders[localId][floor][networkMsg.Id], networkorder)
-		} else {
-			syncOrderSystem.CabOrders[localId][floor][networkMsg.Id] = networkorder
-		}
-
-	}
-	//Update our records of the view networkElevator has of halls
 	for floor, orders := range networkMsg.OrderSystem.HallOrders {
 		for btn, networkorder := range orders {
 			syncOrderSystem.HallOrders[floor][btn][networkMsg.Id] = networkorder
 		}
 	}
-
-	//This is where network orders used to be cleared. Now we still have the order.
-	//Add/Update the cab orders of the other elevator into our own representation of them.
-	_, ok := syncOrderSystem.CabOrders[networkMsg.Id]
-	if !ok {
-		syncOrderSystem.CabOrders[networkMsg.Id] = make([]SyncOrder, len(syncOrderSystem.CabOrders[localId]))
-		for floor, req := range networkMsg.OrderSystem.CabOrders[networkMsg.Id] {
-			syncOrderSystem.CabOrders[networkMsg.Id][floor] = make(SyncOrder)
-			syncOrderSystem.CabOrders[networkMsg.Id][floor][localId] = req
-		}
-	} else {
-		for floor, req := range networkMsg.OrderSystem.CabOrders[networkMsg.Id] {
-			//syncOrderSystem.CabOrders[networkMsg.Id][floor] = make(SyncOrder)
-			syncOrderSystem.CabOrders[networkMsg.Id][floor][localId] = transition.Order(syncOrderSystem.CabOrders[networkMsg.Id][floor][localId], req)
+	for elevId, orders := range networkMsg.OrderSystem.CabOrders {
+		_, ok := syncOrderSystem.CabOrders[elevId]
+		if !ok {
+			syncOrderSystem.CabOrders[elevId] = make([]SyncOrder, elevator.N_FLOORS)
+			for floor := 0; floor < elevator.N_FLOORS; floor++ {
+				syncOrderSystem.CabOrders[elevId][floor] = make(SyncOrder)
+			}
+		} else {
+			for floor, order := range orders {
+				//This must be a for loop, because we need to add the world view of everyone
+				for syncID, _ := range networkMsg.OrderSystem.CabOrders {
+					_, ok := syncOrderSystem.CabOrders[elevId][floor][syncID]
+					if ok {
+						syncOrderSystem.CabOrders[elevId][floor][syncID] = transition.Order(syncOrderSystem.CabOrders[elevId][floor][syncID], order)
+					} else {
+						syncOrderSystem.CabOrders[elevId][floor][syncID] = transition.Order(unknownOrder, order)
+					}
+				}
+			}
 		}
 	}
 	return syncOrderSystem
 }
 
-func ConsensusBarrierTransition(localId string, orderSystem SyncOrderSystem, peers []string) SyncOrderSystem {
-	floor, newState := ConsensusTransitionSingleCab(localId, orderSystem.CabOrders, peers)
+func ConsensusBarrierTransition(localId string, syncOrderSystem SyncOrderSystem, peers []string) SyncOrderSystem {
+	floor, newState := ConsensusTransitionSingleCab(localId, syncOrderSystem.CabOrders[localId], peers)
 	if floor != -1 && newState != -1 {
-		orderSystem.CabOrders[localId][floor][localId] = newState
+		syncOrderSystem.CabOrders[localId][floor][localId] = newState
 	}
 
-	floor, btn, newState := ConsensusTransitionSingleHall(localId, orderSystem.HallOrders, peers)
+	floor, btn, newState := ConsensusTransitionSingleHall(localId, syncOrderSystem.HallOrders, peers)
 	if floor != -1 && btn != -1 {
-		orderSystem.HallOrders[floor][btn][localId] = newState
+		syncOrderSystem.HallOrders[floor][btn][localId] = newState
 	}
-	return orderSystem
+	return syncOrderSystem
 }
 
 // Cab and hall are very similar, we should refactor more
-func ConsensusTransitionSingleCab(localId string, CabOrders map[string][]SyncOrder, peers []string) (floor, order int) {
-	for reqFloor, req := range CabOrders[localId] { //We only check our own cabs for consensus
-		if ConsensusAmongPeers(req, peers) { //Consensus
-			ourorder := req[localId]
+func ConsensusTransitionSingleCab(localId string, CabOrders []SyncOrder, peers []string) (floor, order int) {
+	for reqFloor, order := range CabOrders { //We only check our own cabs for consensus
+		if ConsensusAmongPeers(order, peers) { //Consensus
+			ourorder := order[localId]
 			if ourorder == servicedOrder {
+				log.Println("Consensus")
 				return reqFloor, noOrder
 			} else if ourorder == unconfirmedOrder {
+				log.Println("Consensus")
 				return reqFloor, confirmedOrder
 			}
 		}
