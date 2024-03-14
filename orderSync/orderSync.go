@@ -119,6 +119,9 @@ func Sync(elevatorSystemFromFSM chan elevator.Elevator, localId string, orderAss
 
 		case orderToClear := <-orderCompleted:
 			syncOrderSystem = RemoveOrder(localId, orderToClear, syncOrderSystem)
+			if orderToClear.Cab {
+				log.Println("Removed order")
+			}
 
 		case <-timer.C: //Timer reset, send new state update
 			msgCounter += 1
@@ -150,21 +153,20 @@ func RemoveOrder(localId string, orderToClear orders.ClearFloorOrders, syncOrder
 }
 
 func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem SyncOrderSystem, peers []string) SyncOrderSystem {
+
 	updatedSyncOrderSystem = AddElevatorToSyncOrderSystem(localId, networkMsg, updatedSyncOrderSystem)
 
 	orderSystem := SyncOrderSystemToOrderSystem(localId, updatedSyncOrderSystem)
 	orderSystem.HallOrders = transition.Hall(orderSystem.HallOrders, networkMsg.OrderSystem.HallOrders)
 	//Check if Sync
 	log.Println("OrderSystem cabs:", orderSystem.CabOrders)
-	log.Println("NetworkMSG cabs:", networkMsg.OrderSystem.CabOrders)
-	/*
-		_, ok := updatedSyncOrderSystem.CabOrders[networkMsg.Id]
-		if ok && len(orderSystem.CabOrders[networkMsg.Id]) > 0 {
-			orderSystem.CabOrders[localId] = transition.Cab(orderSystem.CabOrders[localId], orderSystem.CabOrders[networkMsg.Id])
-		} else {
-			log.Println("Could not transition cabs. We did not add elevator", networkMsg.Id, "to syncOrderSystem")
-		}
-	*/
+	log.Println("NetworkMSG cabs:", networkMsg.OrderSystem.CabOrders) //This now contains the orders of jonas (on jonas, opposite on 1)
+	_, ok := updatedSyncOrderSystem.CabOrders[networkMsg.Id]
+	if ok && len(orderSystem.CabOrders[networkMsg.Id]) > 0 {
+		orderSystem.CabOrders[localId] = transition.Cab(orderSystem.CabOrders[localId], networkMsg.OrderSystem.CabOrders[networkMsg.Id])
+	} else {
+		log.Println("Could not transition cabs. We did not add elevator", networkMsg.Id, "to syncOrderSystem")
+	}
 	updatedSyncOrderSystem = UpdateSyncOrderSystem(localId, updatedSyncOrderSystem, orderSystem)
 
 	return ConsensusBarrierTransition(localId, updatedSyncOrderSystem, peers)
@@ -173,8 +175,14 @@ func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem Sync
 // REmeber to never overwrite. Seperate update (transition) and adding!
 func AddElevatorToSyncOrderSystem(localId string, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
 	//Update our records of the view networkElevator has of our cabs
-	for floor, networkorder := range networkMsg.OrderSystem.CabOrders[localId] {
-		syncOrderSystem.CabOrders[localId][floor][networkMsg.Id] = transition.Order(syncOrderSystem.CabOrders[localId][floor][networkMsg.Id], networkorder) //Transition here is wrong
+	for floor, networkorder := range networkMsg.OrderSystem.CabOrders[localId] { //Make sure this never crashes
+		_, ok := syncOrderSystem.CabOrders[localId][floor][networkMsg.Id]
+		if ok {
+			syncOrderSystem.CabOrders[localId][floor][networkMsg.Id] = transition.Order(syncOrderSystem.CabOrders[localId][floor][networkMsg.Id], networkorder)
+		} else {
+			syncOrderSystem.CabOrders[localId][floor][networkMsg.Id] = networkorder
+		}
+
 	}
 	//Update our records of the view networkElevator has of halls
 	for floor, orders := range networkMsg.OrderSystem.HallOrders {
@@ -183,14 +191,20 @@ func AddElevatorToSyncOrderSystem(localId string, networkMsg StateMsg, syncOrder
 		}
 	}
 
+	//This is where network orders used to be cleared. Now we still have the order.
+	//Add/Update the cab orders of the other elevator into our own representation of them.
 	_, ok := syncOrderSystem.CabOrders[networkMsg.Id]
 	if !ok {
 		syncOrderSystem.CabOrders[networkMsg.Id] = make([]SyncOrder, len(syncOrderSystem.CabOrders[localId]))
-	}
-	//Add/Update the cab orders of the other elevator into our own representation of them.
-	for floor, req := range networkMsg.OrderSystem.CabOrders[networkMsg.Id] {
-		syncOrderSystem.CabOrders[networkMsg.Id][floor] = make(SyncOrder)
-		syncOrderSystem.CabOrders[networkMsg.Id][floor][localId] = req
+		for floor, req := range networkMsg.OrderSystem.CabOrders[networkMsg.Id] {
+			syncOrderSystem.CabOrders[networkMsg.Id][floor] = make(SyncOrder)
+			syncOrderSystem.CabOrders[networkMsg.Id][floor][localId] = req
+		}
+	} else {
+		for floor, req := range networkMsg.OrderSystem.CabOrders[networkMsg.Id] {
+			//syncOrderSystem.CabOrders[networkMsg.Id][floor] = make(SyncOrder)
+			syncOrderSystem.CabOrders[networkMsg.Id][floor][localId] = transition.Order(syncOrderSystem.CabOrders[networkMsg.Id][floor][localId], req)
+		}
 	}
 	return syncOrderSystem
 }
@@ -306,9 +320,9 @@ func UpdateSyncOrderSystem(localId string, syncOrderSystem SyncOrderSystem, orde
 			syncOrderSystem.HallOrders[i][j][localId] = req
 		}
 	}
-	for id, cabs := range syncOrderSystem.CabOrders {
+	for id, cabs := range orderSystem.CabOrders {
 		for floor, req := range cabs {
-			syncOrderSystem.CabOrders[id][floor][localId] = req[localId]
+			syncOrderSystem.CabOrders[id][floor][localId] = req
 		}
 	}
 	return syncOrderSystem
@@ -322,7 +336,7 @@ func SyncOrderSystemToOrderSystem(localId string, syncOrderSystem SyncOrderSyste
 			newOrderSystem.HallOrders[i][j] = req[localId]
 		}
 	}
-	for id, cabs := range syncOrderSystem.CabOrders {
+	for id, cabs := range syncOrderSystem.CabOrders { //Changeing this leads to all orders being duplicated
 		newOrderSystem.CabOrders[id] = make([]int, elevator.N_FLOORS)
 		for i, req := range cabs {
 			newOrderSystem.CabOrders[id][i] = req[localId] //This is dangrous but needed. See comments in AddElevatorToSyncOrderSystem. This could be the only place where we access SyncOrderSystem, but only care about ourself (e.g we could use orderSystem all other places)
