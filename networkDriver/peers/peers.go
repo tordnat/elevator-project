@@ -34,7 +34,7 @@ func Transmitter(port int, id string, transmitEnable <-chan bool) {
 	}
 }
 
-func Receiver(port int, peerUpdateCh chan<- PeerUpdate) {
+func receiver(port int, peerUpdateCh chan<- PeerUpdate) {
 
 	var buf [1024]byte
 	var p PeerUpdate
@@ -86,10 +86,10 @@ func Receiver(port int, peerUpdateCh chan<- PeerUpdate) {
 	}
 }
 
-func ReceiverForwarder(port int, recipients []chan PeerUpdate) {
+func Reciever(port int, recipients []chan PeerUpdate) {
 	peersReceiver := make(chan PeerUpdate)
 
-	go Receiver(port, peersReceiver)
+	go receiver(port, peersReceiver)
 	for peerUpdateMsg := range peersReceiver {
 		for _, recipient := range recipients {
 			go func(recipient chan PeerUpdate, msg PeerUpdate) { // To make forwarding non-blocking
