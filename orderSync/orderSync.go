@@ -119,9 +119,6 @@ func Sync(elevatorSystemFromFSM chan elevator.Elevator, localId string, orderAss
 
 		case orderToClear := <-orderCompleted:
 			syncOrderSystem = RemoveOrder(localId, orderToClear, syncOrderSystem)
-			if orderToClear.Cab {
-				log.Println("Removed order")
-			}
 
 		case <-timer.C: //Timer reset, send new state update
 			msgCounter += 1
@@ -156,12 +153,9 @@ func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem Sync
 
 	updatedSyncOrderSystem = AddElevatorToSyncOrderSystem(localId, networkMsg, updatedSyncOrderSystem)
 
+	//Should this be changed?
 	orderSystem := SyncOrderSystemToOrderSystem(localId, updatedSyncOrderSystem)
 	orderSystem.HallOrders = transition.Hall(orderSystem.HallOrders, networkMsg.OrderSystem.HallOrders)
-	//Check if Sync
-	log.Println(localId, "OrderSystem cabs:", orderSystem.CabOrders)
-	log.Println(networkMsg.Id, "NetworkMSG cabs:", networkMsg.OrderSystem.CabOrders)
-	log.Println(localId, "Sync cabs:", updatedSyncOrderSystem.CabOrders)
 
 	updatedSyncOrderSystem = UpdateSyncOrderSystem(localId, updatedSyncOrderSystem, orderSystem)
 
@@ -178,7 +172,6 @@ func AddElevatorToSyncOrderSystem(localId string, networkMsg StateMsg, syncOrder
 		_, ok := syncOrderSystem.CabOrders[elevId]
 		if ok {
 			for floor, order := range orders {
-				//This must be a for loop, because we need to add the world view of everyone
 				for syncID := range networkMsg.OrderSystem.CabOrders {
 					_, ok := syncOrderSystem.CabOrders[elevId][floor][syncID]
 					if ok {
@@ -217,10 +210,8 @@ func ConsensusTransitionSingleCab(localId string, CabOrders []SyncOrder, peers [
 		if ConsensusAmongPeers(order, peers) { //Consensus
 			ourorder := order[localId]
 			if ourorder == servicedOrder {
-				log.Println("Consensus")
 				return reqFloor, noOrder
 			} else if ourorder == unconfirmedOrder {
-				log.Println("Consensus")
 				return reqFloor, confirmedOrder
 			}
 		}

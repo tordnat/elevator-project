@@ -16,7 +16,6 @@ import (
 const peersPort int = 25566
 
 func main() {
-	// elevatorID := "0"
 	log.Println("Elevator starting 🛗")
 	elevatorPort, elevatorId := cmd.InitCommandLineArgs(os.Args)
 	elevio.Init(fmt.Sprintf("localhost:%d", elevatorPort), elevator.N_FLOORS)

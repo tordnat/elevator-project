@@ -43,12 +43,14 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan orders.ClearFloorOrders
 			if isObstructed {
 				break
 			}
-			elevState.Behaviour, elevState.Direction = OnDoorTimeOut(elevState, doorTimer, inactivityTimer)
+			elevState.Behaviour, elevState.Direction = OnDoorTimeOut(elevState, doorTimer, inactivityTimer, obstructionTimer, isObstructed)
+
 			var clearOrder orders.ClearFloorOrders
 			clearOrder.Floor = elevState.Floor
 			clearOrder.Cab = true
 			clearOrder.HallUp = orders.ShouldClearHallUp(elevState.Floor, elevState.Direction, elevState.Orders)
 			clearOrder.HallDown = orders.ShouldClearHallDown(elevState.Floor, elevState.Direction, elevState.Orders)
+
 			clearOrders <- clearOrder
 
 		case isObstructed = <-obstructionEvent:
@@ -78,7 +80,7 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan orders.ClearFloorOrders
 func resetElevatorTimers(isObstructed bool, obstructionTimer *time.Timer, doorTimer *time.Timer) { //Add doorTImerReset here as well
 	if isObstructed {
 		log.Println("Obstruction occured!")
-		obstructionTimer.Reset(inactivityTimeout)
+		obstructionTimer.Reset(obstructionTimeout)
 	} else {
 		obstructionTimer.Stop()
 	}
@@ -86,7 +88,7 @@ func resetElevatorTimers(isObstructed bool, obstructionTimer *time.Timer, doorTi
 }
 
 func updateOrders(elevState elevator.Elevator, doorTimer *time.Timer, inactivityTimer *time.Timer) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
-	if orders.HaveOrders(elevState.Floor, elevState.Orders) { //Consider movign if statement out of function
+	if orders.HaveOrders(elevState.Floor, elevState.Orders) {
 		switch elevState.Behaviour {
 		case elevator.EB_Idle:
 			pair := orders.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Orders)
@@ -140,7 +142,7 @@ func OnFloorArrival(elevState elevator.Elevator, doorTimer *time.Timer, inactivi
 	return elevState.Behaviour, clearOrder
 }
 
-func OnDoorTimeOut(elevState elevator.Elevator, doorTimer *time.Timer, inactivityTimer *time.Timer) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
+func OnDoorTimeOut(elevState elevator.Elevator, doorTimer *time.Timer, inactivityTimer *time.Timer, obstructionTimer *time.Timer, isObstructed bool) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
 	switch elevState.Behaviour {
 	case elevator.EB_DoorOpen:
 		pair := orders.ChooseDirection(elevState.Direction, elevState.Floor, elevState.Orders)
@@ -150,7 +152,8 @@ func OnDoorTimeOut(elevState elevator.Elevator, doorTimer *time.Timer, inactivit
 		switch elevState.Behaviour {
 		case elevator.EB_DoorOpen:
 			//inactivityTimer.Reset(inactivityTimeout)
-			doorTimer.Reset(elevator.DOOR_OPEN_DURATION)
+			resetElevatorTimers(isObstructed, obstructionTimer, doorTimer)
+			//doorTimer.Reset(elevator.DOOR_OPEN_DURATION)
 		case elevator.EB_Idle:
 			elevio.SetDoorOpenLamp(false)
 			elevio.SetMotorDirection(elevState.Direction)
