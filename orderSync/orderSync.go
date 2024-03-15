@@ -1,7 +1,6 @@
 package orderSync
 
 import (
-	"elevator-project/transition"
 	"elevatorAlgorithm/elevator"
 	"elevatorAlgorithm/hra"
 	"elevatorAlgorithm/orders"
@@ -129,21 +128,21 @@ func Sync(elevatorSystemFromFSM chan elevator.Elevator, localId string, orderAss
 
 func AddOrder(localId string, syncOrderSystem SyncOrderSystem, btn elevio.ButtonEvent) SyncOrderSystem {
 	if btn.Button == elevio.BT_Cab {
-		syncOrderSystem.CabOrders[localId][btn.Floor][localId] = transition.Order(syncOrderSystem.CabOrders[localId][btn.Floor][localId], unconfirmedOrder)
+		syncOrderSystem.CabOrders[localId][btn.Floor][localId] = TransitionOrder(syncOrderSystem.CabOrders[localId][btn.Floor][localId], unconfirmedOrder)
 	} else {
-		syncOrderSystem.HallOrders[btn.Floor][btn.Button][localId] = transition.Order(syncOrderSystem.HallOrders[btn.Floor][btn.Button][localId], unconfirmedOrder)
+		syncOrderSystem.HallOrders[btn.Floor][btn.Button][localId] = TransitionOrder(syncOrderSystem.HallOrders[btn.Floor][btn.Button][localId], unconfirmedOrder)
 	}
 	return syncOrderSystem
 }
 func RemoveOrder(localId string, orderToClear orders.ClearFloorOrders, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
 	if orderToClear.Cab {
-		syncOrderSystem.CabOrders[localId][orderToClear.Floor][localId] = transition.Order(syncOrderSystem.CabOrders[localId][orderToClear.Floor][localId], servicedOrder)
+		syncOrderSystem.CabOrders[localId][orderToClear.Floor][localId] = TransitionOrder(syncOrderSystem.CabOrders[localId][orderToClear.Floor][localId], servicedOrder)
 	}
 	if orderToClear.HallUp {
-		syncOrderSystem.HallOrders[orderToClear.Floor][0][localId] = transition.Order(syncOrderSystem.HallOrders[orderToClear.Floor][0][localId], servicedOrder)
+		syncOrderSystem.HallOrders[orderToClear.Floor][0][localId] = TransitionOrder(syncOrderSystem.HallOrders[orderToClear.Floor][0][localId], servicedOrder)
 	}
 	if orderToClear.HallDown {
-		syncOrderSystem.HallOrders[orderToClear.Floor][1][localId] = transition.Order(syncOrderSystem.HallOrders[orderToClear.Floor][1][localId], servicedOrder)
+		syncOrderSystem.HallOrders[orderToClear.Floor][1][localId] = TransitionOrder(syncOrderSystem.HallOrders[orderToClear.Floor][1][localId], servicedOrder)
 	}
 	return syncOrderSystem
 }
@@ -152,17 +151,13 @@ func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem Sync
 
 	updatedSyncOrderSystem = AddElevatorToSyncOrderSystem(localId, networkMsg, updatedSyncOrderSystem)
 
-	orderSystem := SyncOrderSystemToOrderSystem(localId, updatedSyncOrderSystem)
-	orderSystem.HallOrders = transition.Hall(orderSystem.HallOrders, networkMsg.OrderSystem.HallOrders)
-
-	updatedSyncOrderSystem = UpdateSyncOrderSystem(localId, updatedSyncOrderSystem, orderSystem)
-
 	return ConsensusBarrierTransition(localId, updatedSyncOrderSystem, peers)
 }
 
 func AddElevatorToSyncOrderSystem(localId string, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
 	for floor, orders := range networkMsg.OrderSystem.HallOrders {
 		for btn, networkorder := range orders {
+			syncOrderSystem.HallOrders[floor][btn][localId] = TransitionOrder(syncOrderSystem.HallOrders[floor][btn][localId], networkorder)
 			syncOrderSystem.HallOrders[floor][btn][networkMsg.Id] = networkorder
 		}
 	}
@@ -173,9 +168,9 @@ func AddElevatorToSyncOrderSystem(localId string, networkMsg StateMsg, syncOrder
 				for syncID := range networkMsg.OrderSystem.CabOrders {
 					_, ok := syncOrderSystem.CabOrders[elevId][floor][syncID]
 					if ok {
-						syncOrderSystem.CabOrders[elevId][floor][syncID] = transition.Order(syncOrderSystem.CabOrders[elevId][floor][syncID], order)
+						syncOrderSystem.CabOrders[elevId][floor][syncID] = TransitionOrder(syncOrderSystem.CabOrders[elevId][floor][syncID], order)
 					} else {
-						syncOrderSystem.CabOrders[elevId][floor][syncID] = transition.Order(unknownOrder, order)
+						syncOrderSystem.CabOrders[elevId][floor][syncID] = TransitionOrder(unknownOrder, order)
 					}
 				}
 			}
@@ -252,6 +247,23 @@ func ConsensusAmongPeers(order SyncOrder, peers []string) bool {
 		}
 	}
 	return true
+}
+
+func TransitionOrder(currentOrder int, updatedOrder int) int {
+	if currentOrder == unknownOrder { //Catch up if we just joined
+		return updatedOrder
+	}
+	if currentOrder == noOrder && updatedOrder == servicedOrder { //Prevent reset
+		return currentOrder
+	}
+	if currentOrder == servicedOrder && updatedOrder == noOrder { //Reset
+		return noOrder
+	}
+	if updatedOrder <= currentOrder { //Counter
+		return currentOrder
+	} else {
+		return updatedOrder
+	}
 }
 
 func NewSyncOrderSystem(id string) SyncOrderSystem {
