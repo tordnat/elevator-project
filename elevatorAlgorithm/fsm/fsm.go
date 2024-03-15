@@ -26,7 +26,7 @@ func FSM(orderAssignment chan [][]bool, clearOrders chan orders.ClearFloorOrders
 		select {
 		case orders := <-orderAssignment:
 			elevState.Orders = orders
-			elevState.Behaviour, elevState.Direction = updateOrders(elevState, doorTimer, inactivityTimer)
+			elevState.Behaviour, elevState.Direction = updateOrders(elevState, doorTimer, inactivityTimer, obstructionTimer, isObstructed)
 			clearOrders <- OrdersToClear(elevState)
 
 		case floor := <-floorEvent:
@@ -87,7 +87,7 @@ func resetElevatorTimers(isObstructed bool, obstructionTimer *time.Timer, doorTi
 	doorTimer.Reset(elevator.DOOR_OPEN_DURATION)
 }
 
-func updateOrders(elevState elevator.Elevator, doorTimer *time.Timer, inactivityTimer *time.Timer) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
+func updateOrders(elevState elevator.Elevator, doorTimer *time.Timer, inactivityTimer *time.Timer, obstructionTimer *time.Timer, isObstructed bool) (elevator.ElevatorBehaviour, elevio.MotorDirection) {
 	if orders.HaveOrders(elevState.Floor, elevState.Orders) {
 		switch elevState.Behaviour {
 		case elevator.EB_Idle:
@@ -99,7 +99,7 @@ func updateOrders(elevState elevator.Elevator, doorTimer *time.Timer, inactivity
 			switch pair.Behaviour {
 			case elevator.EB_DoorOpen:
 				elevio.SetDoorOpenLamp(true)
-				doorTimer.Reset(elevator.DOOR_OPEN_DURATION)
+				resetElevatorTimers(isObstructed, obstructionTimer, doorTimer)
 			case elevator.EB_Moving:
 				inactivityTimer.Reset(inactivityTimeout)
 				elevio.SetMotorDirection(elevState.Direction)
