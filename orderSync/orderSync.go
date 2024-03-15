@@ -166,10 +166,14 @@ func AddElevatorToSyncOrderSystem(localId string, networkMsg StateMsg, syncOrder
 			for floor, order := range orders {
 				for syncID := range networkMsg.OrderSystem.CabOrders {
 					_, ok := syncOrderSystem.CabOrders[elevId][floor][syncID]
-					if ok {
-						syncOrderSystem.CabOrders[elevId][floor][syncID] = TransitionOrder(syncOrderSystem.CabOrders[elevId][floor][syncID], order)
+					if syncID == localId {
+						if ok {
+							syncOrderSystem.CabOrders[elevId][floor][syncID] = TransitionOrder(syncOrderSystem.CabOrders[elevId][floor][syncID], order)
+						} else {
+							syncOrderSystem.CabOrders[elevId][floor][syncID] = TransitionOrder(unknownOrder, order)
+						}
 					} else {
-						syncOrderSystem.CabOrders[elevId][floor][syncID] = TransitionOrder(unknownOrder, order)
+						syncOrderSystem.CabOrders[elevId][floor][syncID] = order
 					}
 				}
 			}
