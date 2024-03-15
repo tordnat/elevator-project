@@ -78,38 +78,37 @@ func Sync(elevatorSystemFromFSM chan elevator.Elevator, localId string, orderAss
 		select {
 		case btn := <-btnEvent:
 			syncOrderSystem = AddOrder(localId, syncOrderSystem, btn)
-			msgCounter += 1 //To prevent forgetting counter, this should perhaps be in a seperate function
-			networkTransmitter <- StateMsg{localId, msgCounter, elevatorSystems[localId], SyncOrderSystemToOrderSystem(localId, syncOrderSystem)}
 
 		case networkMsg := <-networkReciever:
 			if networkMsg.Counter <= msgCounter && len(activePeers) != 1 && networkMsg.Id == localId { //To only listen to our own message when we are alone
-				msgCounter += 1
 				break
 			}
 			elevatorSystems[networkMsg.Id] = networkMsg.ElevatorState
 			msgCounter = networkMsg.Counter
+
 			syncOrderSystem = Transition(localId, networkMsg, syncOrderSystem, activePeers)
 
 			if elevatorSystems[localId].Floor == -1 {
 				log.Println("Elevator floor is -1, will not send to hra")
 				break
 			}
+
 			elevatorSystem := SyncOrderSystemToElevatorSystem(elevatorSystems, localId, syncOrderSystem, activePeers)
 			lights.UpdateHall(elevatorSystem.HallOrders)
 			lights.UpdateCab(elevatorSystem.ElevatorStates[localId].CabOrders)
 			hraOutput := hra.Decode(hra.AssignOrders(hra.Encode(elevatorSystem)))[localId]
 			if len(hraOutput) > 0 {
 				select {
-				case orderAssignment <- hraOutput:
+				case orderAssignment <- hraOutput: //Non-blocking send
 				default:
 				}
 			} else {
-				log.Println("Hra output empty, input to hra (There could be invalid peers which are not sent here):", SyncOrderSystemToElevatorSystem(elevatorSystems, localId, syncOrderSystem, activePeers))
+				log.Println("Hra output empty, input to hra:", elevatorSystem)
 			}
 
 		case peersUpdate := <-peersReciever:
 			activePeers = peersUpdate.Peers
-			log.Println("Peers:", peersUpdate.Peers)
+
 		case elevator := <-elevatorSystemFromFSM:
 			var tmpElevator Elevator
 			tmpElevator.Behaviour = elevator.Behaviour
@@ -123,7 +122,7 @@ func Sync(elevatorSystemFromFSM chan elevator.Elevator, localId string, orderAss
 		case <-timer.C: //Timer reset, send new state update
 			msgCounter += 1
 			networkTransmitter <- StateMsg{localId, msgCounter, elevatorSystems[localId], SyncOrderSystemToOrderSystem(localId, syncOrderSystem)}
-			timer.Reset(time.Millisecond * 10)
+			timer.Reset(time.Millisecond * 5)
 		}
 	}
 }
@@ -153,7 +152,6 @@ func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem Sync
 
 	updatedSyncOrderSystem = AddElevatorToSyncOrderSystem(localId, networkMsg, updatedSyncOrderSystem)
 
-	//Should this be changed?
 	orderSystem := SyncOrderSystemToOrderSystem(localId, updatedSyncOrderSystem)
 	orderSystem.HallOrders = transition.Hall(orderSystem.HallOrders, networkMsg.OrderSystem.HallOrders)
 

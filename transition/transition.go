@@ -8,14 +8,6 @@ const (
 	servicedOrder
 )
 
-// These are very similar to the hraHallRequestTypeToBool and hraCabRequestTypeToBool. Consider merging them and passing modifier function
-func Cab(internalRequests []int, networkRequests []int) []int {
-	for i, req := range internalRequests {
-		internalRequests[i] = Order(req, networkRequests[i])
-	}
-	return internalRequests
-}
-
 func Hall(internalRequests [][]int, networkRequests [][]int) [][]int {
 	for i, row := range internalRequests {
 		for j, req := range row {
