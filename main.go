@@ -16,7 +16,7 @@ import (
 const peersPort int = 25566
 
 func main() {
-	log.Println("Elevator starting 🛗")
+	log.Println("Elevator is starting 🛗")
 	elevatorPort, elevatorId := cmd.InitCommandLineArgs(os.Args)
 	elevio.Init(fmt.Sprintf("localhost:%d", elevatorPort), elevator.N_FLOORS)
 	buttonEvent := make(chan elevio.ButtonEvent)
@@ -40,7 +40,7 @@ func main() {
 		elevio.SetDoorOpenLamp(true)
 	}
 	elevio.SetDoorOpenLamp(false)
-	log.Println("Elevator", elevatorId, "initialized")
+	log.Println("Elevator", elevatorId, "initialized. Ready to join Network")
 
 	go peers.Transmitter(peersPort, elevatorId, peersTransmitter)
 	go peers.Reciever(peersPort, []chan peers.PeerUpdate{peersReceiverFSM, peersReceiverorderSync})

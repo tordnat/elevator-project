@@ -85,7 +85,7 @@ func Sync(elevatorSystemFromFSM chan elevator.Elevator, localId string, orderAss
 			elevatorSystems[networkMsg.Id] = networkMsg.ElevatorState
 			msgCounter = networkMsg.Counter
 
-			syncOrderSystem = Transition(localId, networkMsg, syncOrderSystem, activePeers)
+			syncOrderSystem = TransitionSystem(localId, networkMsg, syncOrderSystem, activePeers)
 
 			if elevatorSystems[localId].Floor == -1 {
 				log.Println("Elevator floor is -1, will not send to hra")
@@ -147,8 +147,7 @@ func RemoveOrder(localId string, orderToClear orders.ClearFloorOrders, syncOrder
 	return syncOrderSystem
 }
 
-func Transition(localId string, networkMsg StateMsg, updatedSyncOrderSystem SyncOrderSystem, peers []string) SyncOrderSystem {
-
+func TransitionSystem(localId string, networkMsg StateMsg, updatedSyncOrderSystem SyncOrderSystem, peers []string) SyncOrderSystem {
 	updatedSyncOrderSystem = AddElevatorToSyncOrderSystem(localId, networkMsg, updatedSyncOrderSystem)
 
 	return ConsensusBarrierTransition(localId, updatedSyncOrderSystem, peers)
@@ -328,10 +327,10 @@ func SyncOrderSystemToOrderSystem(localId string, syncOrderSystem SyncOrderSyste
 			newOrderSystem.HallOrders[i][j] = req[localId]
 		}
 	}
-	for id, cabs := range syncOrderSystem.CabOrders { //Changeing this leads to all orders being duplicated
+	for id, cabs := range syncOrderSystem.CabOrders {
 		newOrderSystem.CabOrders[id] = make([]int, elevator.N_FLOORS)
 		for i, req := range cabs {
-			newOrderSystem.CabOrders[id][i] = req[localId] //This is dangrous but needed. See comments in AddElevatorToSyncOrderSystem. This could be the only place where we access SyncOrderSystem, but only care about ourself (e.g we could use orderSystem all other places)
+			newOrderSystem.CabOrders[id][i] = req[localId]
 		}
 	}
 
