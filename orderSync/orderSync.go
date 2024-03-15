@@ -161,30 +161,35 @@ func AddElevatorToSyncOrderSystem(localId string, networkMsg StateMsg, syncOrder
 		}
 	}
 	for elevId, orders := range networkMsg.OrderSystem.CabOrders {
-		_, ok := syncOrderSystem.CabOrders[elevId]
-		if ok {
-			for floor, order := range orders {
-				for syncID := range networkMsg.OrderSystem.CabOrders {
-					_, ok := syncOrderSystem.CabOrders[elevId][floor][syncID]
-					if syncID == localId {
-						if ok {
-							syncOrderSystem.CabOrders[elevId][floor][syncID] = TransitionOrder(syncOrderSystem.CabOrders[elevId][floor][syncID], order)
-						} else {
-							syncOrderSystem.CabOrders[elevId][floor][syncID] = TransitionOrder(unknownOrder, order)
-						}
-					} else {
-						syncOrderSystem.CabOrders[elevId][floor][syncID] = order
-					}
-				}
-			}
-		} else {
-			syncOrderSystem.CabOrders[elevId] = make([]SyncOrder, elevator.N_FLOORS)
-			for floor := 0; floor < elevator.N_FLOORS; floor++ {
-				syncOrderSystem.CabOrders[elevId][floor] = make(SyncOrder)
-			}
+		if _, exists := syncOrderSystem.CabOrders[elevId]; !exists {
+			initializeCabOrdersForElevator(elevId, &syncOrderSystem)
+		}
+
+		for floor, order := range orders {
+			syncCabOrderFloor(elevId, floor, localId, order, networkMsg, &syncOrderSystem)
 		}
 	}
 	return syncOrderSystem
+}
+func initializeCabOrdersForElevator(elevId string, syncOrderSystem *SyncOrderSystem) {
+	syncOrderSystem.CabOrders[elevId] = make([]SyncOrder, elevator.N_FLOORS)
+	for floor := 0; floor < elevator.N_FLOORS; floor++ {
+		syncOrderSystem.CabOrders[elevId][floor] = make(SyncOrder)
+	}
+}
+func syncCabOrderFloor(elevId string, floor int, localId string, order int, networkMsg StateMsg, syncOrderSystem *SyncOrderSystem) {
+	for syncID := range networkMsg.OrderSystem.CabOrders {
+		currentOrder, exists := syncOrderSystem.CabOrders[elevId][floor][syncID]
+		if syncID == localId {
+			if exists {
+				syncOrderSystem.CabOrders[elevId][floor][syncID] = TransitionOrder(currentOrder, order)
+			} else {
+				syncOrderSystem.CabOrders[elevId][floor][syncID] = TransitionOrder(unknownOrder, order)
+			}
+		} else {
+			syncOrderSystem.CabOrders[elevId][floor][syncID] = order
+		}
+	}
 }
 
 func ConsensusBarrierTransition(localId string, syncOrderSystem SyncOrderSystem, peers []string) SyncOrderSystem {
