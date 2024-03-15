@@ -162,20 +162,20 @@ func AddElevatorToSyncOrderSystem(localId string, networkMsg StateMsg, syncOrder
 	}
 	for elevId, orders := range networkMsg.OrderSystem.CabOrders {
 		if _, exists := syncOrderSystem.CabOrders[elevId]; !exists {
-			initializeCabOrdersForElevator(elevId, &syncOrderSystem)
+			syncOrderSystem = initializeCabOrdersForElevator(elevId, syncOrderSystem)
 		}
-
 		for floor, order := range orders {
 			syncCabOrderFloor(elevId, floor, localId, order, networkMsg, &syncOrderSystem)
 		}
 	}
 	return syncOrderSystem
 }
-func initializeCabOrdersForElevator(elevId string, syncOrderSystem *SyncOrderSystem) {
+func initializeCabOrdersForElevator(elevId string, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
 	syncOrderSystem.CabOrders[elevId] = make([]SyncOrder, elevator.N_FLOORS)
 	for floor := 0; floor < elevator.N_FLOORS; floor++ {
 		syncOrderSystem.CabOrders[elevId][floor] = make(SyncOrder)
 	}
+	return syncOrderSystem
 }
 func syncCabOrderFloor(elevId string, floor int, localId string, order int, networkMsg StateMsg, syncOrderSystem *SyncOrderSystem) {
 	for syncID := range networkMsg.OrderSystem.CabOrders {
