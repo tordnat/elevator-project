@@ -27,18 +27,6 @@ type Elevator struct {
 
 type Order elevio.ButtonEvent
 
-func (eb ElevatorBehaviour) String() string {
-	if eb == EB_Idle {
-		return "EB_Idle"
-	} else if eb == EB_DoorOpen {
-		return "EB_DoorOpen"
-	} else if eb == EB_Moving {
-		return "EB_Moving"
-	} else {
-		return "EB_UNDEFINED"
-	}
-}
-
 func NewElevator(behaviour ElevatorBehaviour, floor int, dir elevio.MotorDirection, numFloors int) Elevator {
 	newElevator := Elevator{}
 	newElevator.Behaviour = behaviour

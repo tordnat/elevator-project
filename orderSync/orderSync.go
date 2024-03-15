@@ -22,11 +22,11 @@ type StateMsg struct {
 	Id            string
 	Counter       uint64 //Non-monotonic counter to only recieve newest data
 	ElevatorState Elevator
-	OrderSystem   OrderSystem
+	OrderSystem   NetworkOrderSystem
 }
 
 const (
-	unknownOrder = iota
+	unknownStatus = iota
 	noOrder
 	unconfirmedOrder
 	confirmedOrder
@@ -41,7 +41,7 @@ type SyncOrderSystem struct {
 	HallOrders [][]SyncOrder
 	CabOrders  map[string][]SyncOrder
 }
-type OrderSystem struct {
+type NetworkOrderSystem struct {
 	HallOrders [][]int
 	CabOrders  map[string][]int
 }
@@ -120,7 +120,7 @@ func Sync(elevatorSystemFromFSM chan elevator.Elevator, localId string, orderAss
 
 		case <-timer.C: //Timer reset, send new state update
 			msgCounter += 1
-			networkTransmitter <- StateMsg{localId, msgCounter, elevatorSystems[localId], SyncOrderSystemToOrderSystem(localId, syncOrderSystem)}
+			networkTransmitter <- StateMsg{localId, msgCounter, elevatorSystems[localId], SyncOrderSystemToNetworkOrderSystem(localId, syncOrderSystem)}
 			timer.Reset(time.Millisecond * 5)
 		}
 	}
@@ -160,12 +160,12 @@ func AddElevatorToSyncOrderSystem(localId string, networkMsg StateMsg, syncOrder
 			syncOrderSystem.HallOrders[floor][btn][networkMsg.Id] = networkorder
 		}
 	}
-	for elevId, orders := range networkMsg.OrderSystem.CabOrders {
+	for elevId, cabOrders := range networkMsg.OrderSystem.CabOrders {
 		if _, exists := syncOrderSystem.CabOrders[elevId]; !exists {
 			syncOrderSystem = initializeCabOrdersForElevator(elevId, syncOrderSystem)
 		}
-		for floor, order := range orders {
-			syncCabOrderFloor(elevId, floor, localId, order, networkMsg, &syncOrderSystem)
+		for floor, order := range cabOrders {
+			syncOrderSystem = syncCabOrderFloor(elevId, localId, floor, order, networkMsg, syncOrderSystem)
 		}
 	}
 	return syncOrderSystem
@@ -177,19 +177,20 @@ func initializeCabOrdersForElevator(elevId string, syncOrderSystem SyncOrderSyst
 	}
 	return syncOrderSystem
 }
-func syncCabOrderFloor(elevId string, floor int, localId string, order int, networkMsg StateMsg, syncOrderSystem *SyncOrderSystem) {
+func syncCabOrderFloor(elevId string, localId string, floor int, order int, networkMsg StateMsg, syncOrderSystem SyncOrderSystem) SyncOrderSystem {
 	for syncID := range networkMsg.OrderSystem.CabOrders {
 		currentOrder, exists := syncOrderSystem.CabOrders[elevId][floor][syncID]
 		if syncID == localId {
 			if exists {
 				syncOrderSystem.CabOrders[elevId][floor][syncID] = TransitionOrder(currentOrder, order)
 			} else {
-				syncOrderSystem.CabOrders[elevId][floor][syncID] = TransitionOrder(unknownOrder, order)
+				syncOrderSystem.CabOrders[elevId][floor][syncID] = TransitionOrder(unknownStatus, order)
 			}
 		} else {
 			syncOrderSystem.CabOrders[elevId][floor][syncID] = order
 		}
 	}
+	return syncOrderSystem
 }
 
 func ConsensusBarrierTransition(localId string, syncOrderSystem SyncOrderSystem, peers []string) SyncOrderSystem {
@@ -207,13 +208,13 @@ func ConsensusBarrierTransition(localId string, syncOrderSystem SyncOrderSystem,
 
 // Cab and hall are very similar, we should refactor more
 func ConsensusTransitionSingleCab(localId string, CabOrders []SyncOrder, peers []string) (floor, order int) {
-	for reqFloor, order := range CabOrders { //We only check our own cabs for consensus
+	for orderFloor, order := range CabOrders { //We only check our own cabs for consensus
 		if ConsensusAmongPeers(order, peers) { //Consensus
 			ourorder := order[localId]
 			if ourorder == servicedOrder {
-				return reqFloor, noOrder
+				return orderFloor, noOrder
 			} else if ourorder == unconfirmedOrder {
-				return reqFloor, confirmedOrder
+				return orderFloor, confirmedOrder
 			}
 		}
 	}
@@ -221,14 +222,14 @@ func ConsensusTransitionSingleCab(localId string, CabOrders []SyncOrder, peers [
 }
 
 func ConsensusTransitionSingleHall(localId string, HallOrders [][]SyncOrder, peers []string) (floor, btn, order int) {
-	for reqFloor, row := range HallOrders {
-		for reqBtn, req := range row {
-			if ConsensusAmongPeers(req, peers) {
-				ourorder := req[localId]
+	for orderFloor, row := range HallOrders {
+		for orderBtn, order := range row {
+			if ConsensusAmongPeers(order, peers) {
+				ourorder := order[localId]
 				if ourorder == servicedOrder {
-					return reqFloor, reqBtn, noOrder
+					return orderFloor, orderBtn, noOrder
 				} else if ourorder == unconfirmedOrder {
-					return reqFloor, reqBtn, confirmedOrder
+					return orderFloor, orderBtn, confirmedOrder
 				}
 			}
 		}
@@ -258,7 +259,7 @@ func ConsensusAmongPeers(order SyncOrder, peers []string) bool {
 }
 
 func TransitionOrder(currentOrder int, updatedOrder int) int {
-	if currentOrder == unknownOrder { //Catch up if we just joined
+	if currentOrder == unknownStatus { //Catch up if we just joined
 		return updatedOrder
 	}
 	if currentOrder == noOrder && updatedOrder == servicedOrder { //Prevent reset
@@ -280,15 +281,15 @@ func NewSyncOrderSystem(id string) SyncOrderSystem {
 		HallOrders[i] = make([]SyncOrder, elevator.N_HALL_BUTTONS)
 		for j := 0; j < elevator.N_HALL_BUTTONS; j++ {
 			initMap := make(SyncOrder)
-			initMap[id] = unknownOrder // Init with unknown to just join network
-			HallOrders[i][j] = map[string]int{id: unknownOrder}
+			initMap[id] = unknownStatus
+			HallOrders[i][j] = map[string]int{id: unknownStatus}
 		}
 	}
 
 	CabOrders := make(map[string][]SyncOrder)
 	CabOrders[id] = make([]SyncOrder, elevator.N_FLOORS)
 	for i := 0; i < elevator.N_FLOORS; i++ { //Fix
-		CabOrders[id][i] = SyncOrder{id: unknownOrder}
+		CabOrders[id][i] = SyncOrder{id: unknownStatus}
 	}
 	return SyncOrderSystem{
 		HallOrders: HallOrders,
@@ -296,7 +297,7 @@ func NewSyncOrderSystem(id string) SyncOrderSystem {
 	}
 }
 
-func newOrderSystem(id string) OrderSystem {
+func newOrderSystem(id string) NetworkOrderSystem {
 	HallOrders := make([][]int, elevator.N_FLOORS)
 	for i := 0; i < elevator.N_FLOORS; i++ {
 		HallOrders[i] = make([]int, elevator.N_HALL_BUTTONS)
@@ -305,41 +306,41 @@ func newOrderSystem(id string) OrderSystem {
 	CabOrders := make(map[string][]int)
 	CabOrders[id] = make([]int, elevator.N_FLOORS)
 	for i := 0; i < elevator.N_FLOORS; i++ {
-		CabOrders[id][i] = unknownOrder
+		CabOrders[id][i] = unknownStatus
 	}
 
-	return OrderSystem{
+	return NetworkOrderSystem{
 		HallOrders: HallOrders,
 		CabOrders:  CabOrders,
 	}
 }
 
-func UpdateSyncOrderSystem(localId string, syncOrderSystem SyncOrderSystem, orderSystem OrderSystem) SyncOrderSystem {
+func UpdateSyncOrderSystem(localId string, syncOrderSystem SyncOrderSystem, orderSystem NetworkOrderSystem) SyncOrderSystem {
 	for i, floor := range orderSystem.HallOrders {
-		for j, req := range floor {
-			syncOrderSystem.HallOrders[i][j][localId] = req
+		for j, order := range floor {
+			syncOrderSystem.HallOrders[i][j][localId] = order
 		}
 	}
 	for id, cabs := range orderSystem.CabOrders {
-		for floor, req := range cabs {
-			syncOrderSystem.CabOrders[id][floor][localId] = req
+		for floor, order := range cabs {
+			syncOrderSystem.CabOrders[id][floor][localId] = order
 		}
 	}
 	return syncOrderSystem
 }
 
-func SyncOrderSystemToOrderSystem(localId string, syncOrderSystem SyncOrderSystem) OrderSystem {
-	var newOrderSystem OrderSystem = newOrderSystem(localId)
+func SyncOrderSystemToNetworkOrderSystem(localId string, syncOrderSystem SyncOrderSystem) NetworkOrderSystem {
+	var newOrderSystem NetworkOrderSystem = newOrderSystem(localId)
 
-	for i, floor := range syncOrderSystem.HallOrders {
-		for j, req := range floor {
-			newOrderSystem.HallOrders[i][j] = req[localId]
+	for i, floorOrder := range syncOrderSystem.HallOrders {
+		for j, order := range floorOrder {
+			newOrderSystem.HallOrders[i][j] = order[localId]
 		}
 	}
-	for id, cabs := range syncOrderSystem.CabOrders {
+	for id, cabOrders := range syncOrderSystem.CabOrders {
 		newOrderSystem.CabOrders[id] = make([]int, elevator.N_FLOORS)
-		for i, req := range cabs {
-			newOrderSystem.CabOrders[id][i] = req[localId]
+		for i, order := range cabOrders {
+			newOrderSystem.CabOrders[id][i] = order[localId]
 		}
 	}
 
@@ -368,8 +369,8 @@ func NewLocalElevatorState(elevatorSystem Elevator, id string, syncOrderSystem S
 	hraElevator.Floor = elevatorSystem.Floor
 
 	hraElevator.CabOrders = make([]bool, len(syncOrderSystem.CabOrders[id]))
-	for i, req := range syncOrderSystem.CabOrders[id] {
-		hraElevator.CabOrders[i] = (req[id] == confirmedOrder)
+	for i, order := range syncOrderSystem.CabOrders[id] {
+		hraElevator.CabOrders[i] = (order[id] == confirmedOrder)
 	}
 
 	return hraElevator
@@ -380,8 +381,8 @@ func SyncOrderSystemToElevatorSystem(elevatorSystems map[string]Elevator, localI
 
 	//Fill halls. Don't need peers, because we base it on our own id
 	for i, floor := range syncOrderSystem.HallOrders {
-		for j, req := range floor {
-			hraElevSys.HallOrders[i][j] = (req[localId] == confirmedOrder)
+		for j, order := range floor {
+			hraElevSys.HallOrders[i][j] = (order[localId] == confirmedOrder)
 		}
 	}
 

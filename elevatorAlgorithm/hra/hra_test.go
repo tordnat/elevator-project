@@ -1,38 +1,28 @@
 package hra_test
 
 import (
-	"elevatorAlgorithm/elevator"
 	"elevatorAlgorithm/hra"
-	"elevatorDriver/elevio"
 	"fmt"
 	"testing"
 )
 
-const (
-	unknownOrder     = 0
-	noOrder          = 1
-	unconfirmedOrder = 2
-	confirmedOrder   = 3
-)
-
-// Example usage. Remove when module is incorporated
 func TestHra(t *testing.T) {
-	system := hra.ElevatorSystem{
-		HallOrders: [][]int{
-			{noOrder, noOrder}, {confirmedOrder, noOrder}, {noOrder, noOrder}, {noOrder, confirmedOrder},
+	system := hra.HraElevatorSystem{
+		HallOrders: [][]bool{
+			{false, false}, {true, false}, {false, false}, {false, true},
 		},
-		ElevatorStates: map[string]hra.LocalElevatorState{
+		ElevatorStates: map[string]hra.HraLocalElevatorState{
 			"0": {
-				Behaviour: elevator.EB_Moving,
+				Behaviour: "moving",
 				Floor:     2,
-				Direction: elevio.MD_Up,
-				CabOrders: []int{noOrder, noOrder, confirmedOrder, confirmedOrder},
+				Direction: "up",
+				CabOrders: []bool{false, false, true, true},
 			},
 			"1": {
-				Behaviour: elevator.EB_Idle,
+				Behaviour: "idle",
 				Floor:     0,
-				Direction: elevio.MD_Stop,
-				CabOrders: []int{noOrder, noOrder, noOrder, noOrder},
+				Direction: "stop",
+				CabOrders: []bool{false, false, false, false},
 			},
 		},
 	}
