@@ -1,0 +1,14 @@
+[Unit]
+Description=Instance %I of Distributed Elevator Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/student/.config/elevator/launch_elevator.sh %i
+Restart=always
+# Restart service after 1 second if the service crashes:
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
+

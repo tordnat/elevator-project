@@ -1,0 +1,6 @@
+[submodule "hallRequestAssigner"]
+	path = Project-resources
+	url = https://github.com/TTK4145/Project-resources.git
+[submodule "orderAssigner"]
+	path = Project-resources
+	url = https://github.com/TTK4145/Project-resources.git
