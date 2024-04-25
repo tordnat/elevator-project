@@ -2,6 +2,7 @@
 
 Elevator project for Real-time Programming TTK4145 at NTNU. This a distributed program which is designed to handle multiple elevators on a network concurrently in a fail-safe manner. 
 
+> Disclaimer: Our elevator does not handle new orders when disconnected from the network. This is due to the state only being transmit through UDP on the network, without any form of loopback. Introducing a form of local loopback on transmit messages, such as an additional go channel, would solve this issue and fulfil the elevator specification.
 ## Dependencies
 
 This project requires the following dependencies to be installed on the host machine:
